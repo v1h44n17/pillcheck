@@ -20,6 +20,7 @@ const SECTIONS: Array<[field: string, heading: string, budget: number]> = [
 ];
 
 const MAX_CHARS_PER_DRUG = 3500;
+export const LABEL_TIMEOUT_MS = 6_000;
 
 export interface LabelExcerpt {
   ingredient: string;
@@ -47,7 +48,8 @@ export function excerptFromLabel(ingredient: string, record: LabelRecord): Label
 
 async function fetchOne(ingredient: string, fetchImpl: typeof fetch): Promise<LabelExcerpt | undefined> {
   const params = new URLSearchParams({ search: `openfda.generic_name:"${ingredient}"`, limit: "5" });
-  const res = await fetchImpl(`${LABEL_API}?${params}`);
+  // A slow label must not stall the answer: give up after LABEL_TIMEOUT_MS (that drug is then ungrounded).
+  const res = await fetchImpl(`${LABEL_API}?${params}`, { signal: AbortSignal.timeout(LABEL_TIMEOUT_MS) });
   if (res.status === 404) return undefined; // openFDA: no label found
   if (!res.ok) throw new Error(`openFDA ${res.status}`);
   const { results } = (await res.json()) as { results?: LabelRecord[] };

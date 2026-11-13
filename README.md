@@ -122,6 +122,8 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 | Synthroid + Tums | **caution**, waitHours 4 | "…you need to wait at least four hours between them so your body can absorb your thyroid medicine properly." |
 | Tylenol, while on warfarin + lisinopril | **caution** | "…taking acetaminophen while you take warfarin requires caution because it can affect your bleeding risk…" |
 
+**Safety evaluation: 30/30.** 20 dangerous pairs (warfarin + ibuprofen, sildenafil + nitroglycerin, oxycodone + alprazolam…) and 10 safe ones, run against live Gemini through the full pipeline: **0 missed dangers, 0 over-warnings**, 2.5–4.5 s per answer. Details and the hang it uncovered (now fixed with timeouts): [docs/eval-results.md](docs/eval-results.md).
+
 **Try Step 3 without speaking (dev builds):** `await __pillcheck.check(["advil"], ["warfarin"])` in the console at localhost.
 
 ### Step 5: an audit log that can't hold private data

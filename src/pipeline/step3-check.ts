@@ -204,6 +204,30 @@ export function personaliseSpoken(spoken: string, matches: MedicineMatch[]): str
 
 type CheckModel = Pick<GenerativeModel, "generateContent">;
 
+/**
+ * Per-model cloud timeout. Found by the safety eval: one request hung for over
+ * 110 s (the SDK default is 180 s). Meera should never wait that long; after
+ * this, the next model is tried, then "I couldn't check right now".
+ */
+export const CLOUD_TIMEOUT_MS = 15_000;
+
+export class CloudTimeoutError extends Error {
+  constructor() {
+    super("Cloud check timed out");
+    this.name = "CloudTimeoutError";
+  }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new CloudTimeoutError()), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export interface CheckOptions {
   /** Inject models (tests). Tried in order. */
   models?: Array<{ name: string; model: CheckModel }>;
@@ -211,6 +235,8 @@ export interface CheckOptions {
   modelNames?: readonly string[];
   maxOutputTokens?: number;
   fetchImpl?: typeof fetch;
+  /** Per-model cloud timeout (default CLOUD_TIMEOUT_MS). */
+  timeoutMs?: number;
 }
 
 export async function checkInteractions(request: OutboundRequest, opts: CheckOptions = {}): Promise<InteractionAnswer> {
@@ -242,7 +268,8 @@ export async function checkInteractions(request: OutboundRequest, opts: CheckOpt
   let lastError: unknown;
   for (const { name, model } of candidates) {
     try {
-      const result = await model.generateContent(prompt);
+      // Belt and braces: the SDK's own timeout, plus an independent timer.
+      const result = await withTimeout(model.generateContent(prompt, { timeout: opts.timeoutMs ?? CLOUD_TIMEOUT_MS }), opts.timeoutMs ?? CLOUD_TIMEOUT_MS);
       // ONLY_IN_CLOUD should guarantee this; recording it keeps the audit log honest.
       const source = result.response.inferenceSource ?? InferenceSource.IN_CLOUD;
 

@@ -116,6 +116,29 @@ describe("checkInteractions: answers and failures", () => {
     expect(a.spoken).toBe("Please don't take Advil with Coumadin. It raises your bleeding risk. Ask your pharmacist first.");
   });
 
+  it("a cloud call that hangs times out, and the backup model gets its turn (found by the safety eval)", async () => {
+    const hanging = { generateContent: vi.fn(() => new Promise<never>(() => {})) };
+    const backup = model(ANSWER);
+    const a = await checkInteractions(
+      { medicines: ["ibuprofen"] },
+      {
+        fetchImpl: labelFetch(),
+        timeoutMs: 30,
+        models: [
+          { name: "hangs", model: hanging },
+          { name: "backup", model: backup },
+        ] as unknown as Models,
+      },
+    );
+    expect(a.model).toBe("backup");
+    await expect(
+      checkInteractions(
+        { medicines: ["ibuprofen"] },
+        { fetchImpl: labelFetch(), timeoutMs: 30, models: [{ name: "hangs", model: hanging }] as unknown as Models },
+      ),
+    ).rejects.toBeInstanceOf(CheckUnavailableError);
+  });
+
   it("moves to the backup cloud model when the first is busy", async () => {
     const busy = model(new Error("[500] This model is currently experiencing high demand"));
     const backup = model(ANSWER);
