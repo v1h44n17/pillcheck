@@ -1,3 +1,4 @@
+import { biasPhrases } from "../data/biasPhrases";
 import { getConfig } from "../firebase/remoteConfig";
 import { OnDeviceUnavailableError, RoutingViolationError } from "../guards/onDeviceGuard";
 import { CHECK_ERROR_MESSAGE, REFUSAL_SPOKEN, type CheckErrorKind } from "../pipeline/messages";
@@ -21,7 +22,8 @@ export interface AddByVoiceDeps {
 }
 
 export const defaultAddDeps: AddByVoiceDeps = {
-  listen: (opts) => listenOnce({ ...opts, maxMs: getConfig().listenMaxMs }),
+  listen: (opts) =>
+    listenOnce({ ...opts, maxMs: getConfig().listenMaxMs, phrases: biasPhrases(defaultStore.namesForCheck()) }),
   extract: (t) => extractMedicines(t),
   speak: speakLocally,
   store: defaultStore,

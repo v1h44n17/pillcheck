@@ -147,6 +147,24 @@ describe("orchestrator: refusals and failures", () => {
     spy.mockRestore();
   });
 
+  it("logs straight away: the audit write doesn't wait for the voice to finish", async () => {
+    let finishSpeaking!: () => void;
+    const speak = vi.fn(() => new Promise<boolean>((r) => (finishSpeaking = () => r(true))));
+    const { d, audit } = deps({ speak });
+    const handle = runCheck(d, () => {});
+    await vi.waitFor(() => expect(speak).toHaveBeenCalled());
+    expect(audit).toHaveBeenCalledTimes(1); // already written while still speaking
+    expect(audit.mock.calls[0]![0]).toMatchObject({ outcome: "answered", spoken: true });
+    finishSpeaking();
+    await handle.done;
+  });
+
+  it("records spoken: false when there is no local voice", async () => {
+    const { d, audit } = deps({ canSpeak: () => false });
+    await run(d);
+    expect(audit.mock.calls[0]![0]).toMatchObject({ spoken: false });
+  });
+
   it("a failed audit write is reported, not hidden", async () => {
     const { d } = deps({ audit: vi.fn(async () => undefined) });
     expect((await run(d)).logged).toEqual({ type: "logged", ok: false });

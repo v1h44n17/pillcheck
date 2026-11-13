@@ -45,6 +45,14 @@ declare global {
     readonly results: { readonly length: number; readonly [index: number]: SpeechRecognitionResultLike };
   }
 
+  interface SpeechRecognitionPhraseLike {
+    readonly phrase: string;
+    readonly boost: number;
+  }
+
+  // eslint-disable-next-line no-var
+  var SpeechRecognitionPhrase: (new (phrase: string, boost?: number) => SpeechRecognitionPhraseLike) | undefined;
+
   interface SpeechRecognitionErrorEventLike {
     readonly error: string;
     readonly message?: string;
@@ -58,6 +66,8 @@ declare global {
     maxAlternatives: number;
     /** Chrome: true = recognise on-device only. Absent on browsers that can't. */
     processLocally?: boolean;
+    /** Contextual biasing (Chrome 15x+): phrases the recogniser should expect. */
+    phrases?: SpeechRecognitionPhraseLike[];
     onresult: ((e: SpeechRecognitionEventLike) => void) | null;
     onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null;
     onend: (() => void) | null;

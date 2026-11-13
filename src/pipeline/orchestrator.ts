@@ -1,3 +1,5 @@
+import { cabinet } from "../cabinet/cabinet";
+import { biasPhrases } from "../data/biasPhrases";
 import { getConfig } from "../firebase/remoteConfig";
 import { OnDeviceUnavailableError, RoutingViolationError } from "../guards/onDeviceGuard";
 import { LeakBlockedError, scanOutbound, type LeakGuardResult, type OutboundRequest } from "../guards/leakGuard";
@@ -6,7 +8,7 @@ import { blockedSpokenMessage, CHECK_ERROR_MESSAGE, REFUSAL_SPOKEN, type CheckEr
 import { ListenError, listenOnce, type ListenHandle, type ListenOptions } from "./step1-transcribe";
 import { ExtractionError, extractMedicines, type Extraction } from "./step2-extract";
 import { CheckAnswerError, checkInteractions, CheckUnavailableError, type InteractionAnswer } from "./step3-check";
-import { speakLocally } from "./step4-speak";
+import { pickLocalVoice, speakLocally } from "./step4-speak";
 import { activeSimulateFlags, writeAudit, type AuditInput, type Outcome } from "./step5-audit";
 
 /**
@@ -33,6 +35,8 @@ export interface PipelineDeps {
   extract: (transcript: string) => Promise<Extraction>;
   check: (request: OutboundRequest) => Promise<InteractionAnswer>;
   speak: (text: string) => Promise<boolean>;
+  /** Will speak() actually use a voice? (Decided up front so the audit needn't wait.) */
+  canSpeak?: () => boolean;
   audit: (input: AuditInput) => Promise<unknown>;
   /** Medicines Meera already takes (Day 8). */
   cabinet?: () => string[];
@@ -42,11 +46,14 @@ export interface PipelineDeps {
 
 /** Production wiring. Tunables come from Remote Config (validated; see firebase/remoteConfig.ts). */
 export const defaultDeps: PipelineDeps = {
-  listen: (opts) => listenOnce({ ...opts, maxMs: getConfig().listenMaxMs }),
+  // Bias the on-device recogniser towards her medicines + common ones ("Advil", not "Behind Patel").
+  listen: (opts) =>
+    listenOnce({ ...opts, maxMs: getConfig().listenMaxMs, phrases: biasPhrases(cabinet.namesForCheck()) }),
   extract: (t) => extractMedicines(t),
   check: (r) =>
     checkInteractions(r, { modelNames: getConfig().checkModels, maxOutputTokens: getConfig().maxOutputTokens }),
   speak: speakLocally,
+  canSpeak: () => "speechSynthesis" in globalThis && pickLocalVoice(speechSynthesis.getVoices()) !== undefined,
   audit: writeAudit,
 };
 
@@ -83,9 +90,23 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
   let extractSource: string | undefined;
   let leakGuard: AuditInput["leakGuard"] = { result: "not-run" };
   let answerInfo: AuditInput["answer"];
-  let spoken = false;
-  const say = async (text: string) => {
-    if (text) spoken = (await deps.speak(text)) || spoken;
+  let audited = false;
+
+  /**
+   * Record the outcome (Step 5) FIRST, then speak (Step 4). The audit write
+   * never waits for the voice to finish, so "Logged" updates straight away.
+   * `spoken` is decided up front: we will speak iff a local voice exists.
+   */
+  const settle = async (outcome: Outcome | undefined, text: string): Promise<void> => {
+    const willSpeak = Boolean(text) && (deps.canSpeak?.() ?? true);
+    if (outcome && !audited) {
+      audited = true;
+      void deps
+        .audit({ outcome, extractSource, leakGuard, answer: answerInfo, spoken: willSpeak, demo })
+        .then((id) => onEvent({ type: "logged", ok: Boolean(id) }))
+        .catch(() => onEvent({ type: "logged", ok: false }));
+    }
+    if (text) await deps.speak(text);
   };
 
   onEvent({ type: "listening", interim: "" });
@@ -104,7 +125,7 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
       if (extracted.medicines.length === 0) {
         outcome = "no-medicine";
         onEvent({ type: "error", kind: "no-medicine" });
-        await say(CHECK_ERROR_MESSAGE["no-medicine"]);
+        await settle(outcome, CHECK_ERROR_MESSAGE["no-medicine"]);
         return outcome;
       }
 
@@ -118,7 +139,7 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
       if (!guard.ok) {
         outcome = "blocked";
         leakGuard = { result: "blocked", kinds: guard.findings.map((f) => f.kind) };
-        await say(blockedSpokenMessage(guard.findings));
+        await settle(outcome, blockedSpokenMessage(guard.findings));
         return outcome;
       }
 
@@ -134,8 +155,8 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
       outcome = "answered";
       onEvent({ type: "answered", text: heard.text, answer });
 
-      // ── Step 4: speak it on-device ───────────────────────────────────────
-      await say(answer.spoken);
+      // ── Step 5 (audit) fires now; Step 4 speaks it on-device ─────────────
+      await settle(outcome, answer.spoken);
       return outcome;
     } catch (e) {
       if (e instanceof OnDeviceUnavailableError || e instanceof RoutingViolationError) {
@@ -143,13 +164,13 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
         if (e instanceof RoutingViolationError) console.error("PillCheck routing violation:", e.message);
         outcome = "refused";
         onEvent({ type: "refused", routingViolation: e instanceof RoutingViolationError });
-        await say(REFUSAL_SPOKEN);
+        await settle(outcome, REFUSAL_SPOKEN);
         return outcome;
       }
       if (e instanceof LeakBlockedError) {
         outcome = "blocked";
         leakGuard = { result: "blocked", kinds: e.kinds };
-        await say(blockedSpokenMessage(e.findings));
+        await settle(outcome, blockedSpokenMessage(e.findings));
         return outcome;
       }
       const { outcome: o, kind } = errorKindFor(e);
@@ -160,16 +181,8 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
       if (o) console.error("PillCheck:", e instanceof Error ? e.name : "error");
       outcome = o;
       onEvent({ type: "error", kind });
-      await say(CHECK_ERROR_MESSAGE[kind]);
+      await settle(outcome, CHECK_ERROR_MESSAGE[kind]);
       return outcome;
-    } finally {
-      // ── Step 5: audit (fire-and-forget; never blocks the answer) ─────────
-      if (outcome) {
-        void deps
-          .audit({ outcome, extractSource, leakGuard, answer: answerInfo, spoken, demo })
-          .then((id) => onEvent({ type: "logged", ok: Boolean(id) }))
-          .catch(() => onEvent({ type: "logged", ok: false }));
-      }
     }
   })();
 

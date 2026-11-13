@@ -45,7 +45,16 @@ export interface ListenOptions {
   /** Hard stop so the mic never stays open. Chrome also stops on silence. */
   maxMs?: number;
   sim?: Simulation;
+  /**
+   * Contextual biasing: medicine names the recogniser should expect (on-device
+   * only). Used when the browser supports it; ignored (with one retry without
+   * phrases) when it doesn't. See src/data/biasPhrases.ts.
+   */
+  phrases?: ReadonlyArray<{ phrase: string; boost: number }>;
 }
+
+/** Internal: the recogniser rejected our bias phrases; retry without them. */
+class PhrasesRejected extends Error {}
 
 export interface ListenHandle {
   result: Promise<Transcript>;
@@ -79,6 +88,8 @@ function mapError(code: string): Error {
     // tried to reach a speech server. Refuse rather than retry.
     case "network":
       return new OnDeviceUnavailableError("speech", "error");
+    case "phrases-not-supported":
+      return new PhrasesRejected(code);
     default:
       return new ListenError("failed", code);
   }
@@ -89,9 +100,19 @@ export function listenOnce(opts: ListenOptions = {}): ListenHandle {
   let cancelled = false;
   let stopRequested = false;
 
-  const result = (async (): Promise<Transcript> => {
-    await assertLocalSpeechReady(opts.sim ?? readSimulation());
+  /** Sets bias phrases if supported. Returns whether they were applied. */
+  function applyPhrases(r: SpeechRecognitionLike): boolean {
+    const Phrase = globalThis.SpeechRecognitionPhrase;
+    if (!opts.phrases?.length || !Phrase || !("phrases" in r)) return false;
+    try {
+      r.phrases = opts.phrases.map((p) => new Phrase(p.phrase, p.boost));
+      return true;
+    } catch {
+      return false; // e.g. a boost out of range: just listen without biasing
+    }
+  }
 
+  async function attempt(usePhrases: boolean): Promise<Transcript> {
     const SR = recognizerCtor();
     if (!SR) throw new OnDeviceUnavailableError("speech", "api-missing");
     const r = new SR();
@@ -105,6 +126,7 @@ export function listenOnce(opts: ListenOptions = {}): ListenHandle {
     r.continuous = false; // one question, then stop on silence
     r.interimResults = true;
     r.maxAlternatives = 1;
+    if (usePhrases) applyPhrases(r);
 
     if (cancelled || stopRequested) throw new ListenError("aborted");
     rec = r;
@@ -144,6 +166,18 @@ export function listenOnce(opts: ListenOptions = {}): ListenHandle {
 
       r.start();
     });
+  }
+
+  const result = (async (): Promise<Transcript> => {
+    await assertLocalSpeechReady(opts.sim ?? readSimulation());
+    try {
+      return await attempt(true);
+    } catch (e) {
+      // Biasing must never cost Meera a check: if the recogniser rejected the
+      // phrases, listen again without them.
+      if (e instanceof PhrasesRejected) return attempt(false);
+      throw e;
+    }
   })();
 
   return {
