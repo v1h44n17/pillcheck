@@ -7,8 +7,20 @@
 declare global {
   type OnDeviceAvailability = "unavailable" | "downloadable" | "downloading" | "available";
 
+  interface LanguageModelExpectedIO {
+    type: "text" | "image" | "audio";
+    languages?: string[];
+  }
+
+  interface LanguageModelCreateOptionsLite {
+    expectedInputs?: LanguageModelExpectedIO[];
+    expectedOutputs?: LanguageModelExpectedIO[];
+    monitor?(m: EventTarget): void;
+  }
+
   interface LanguageModelStatic {
-    availability(options?: unknown): Promise<OnDeviceAvailability>;
+    availability(options?: LanguageModelCreateOptionsLite): Promise<OnDeviceAvailability>;
+    create(options?: LanguageModelCreateOptionsLite): Promise<{ destroy(): void }>;
   }
 
   interface SpeechRecognitionOptions {

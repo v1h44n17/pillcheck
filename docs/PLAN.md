@@ -23,8 +23,9 @@ Today: 13 Nov 2026 (Day 0, planning only).
 | Web Speech on-device: `SpeechRecognition.available({langs, processLocally:true})`, `SpeechRecognition.install(...)`, `recognition.processLocally = true`. **Default Chrome Web Speech sends audio to Google servers** | ✅ Confirmed (MDN); exact Chrome version still to check on your machine | MDN SpeechRecognition/processLocally |
 | App Check for AI Logic: `getAI(app, { backend, useLimitedUseAppCheckTokens: true })` for replay protection; Web provider = reCAPTCHA Enterprise (score-based key); localhost uses `self.FIREBASE_APPCHECK_DEBUG_TOKEN = true` | ✅ Confirmed | firebase.google.com/docs/ai-logic/app-check |
 | Hardware: macOS 13+, ≥22 GB free on the Chrome profile volume, GPU >4 GB VRAM (or 16 GB RAM with 4+ cores, CPU only) | ✅ Confirmed | developer.chrome.com/docs/ai/prompt-api |
-| Exact TS type name for the inference-source enum (`InferenceSource`?) | ❓ We'll read `node_modules/@firebase/ai/dist/*.d.ts` on Day 1 | |
-| `responseConstraint` / `responseSchema` passthrough to on-device in the Firebase SDK | ❓ The docs say structured output works on-device, but I haven't seen the exact field. Verify from .d.ts on Day 4 | |
+| Inference-source enum | ✅ `InferenceSource.ON_DEVICE = "on_device"`, `IN_CLOUD = "in_cloud"` (lowercase values; the docs show the keys) | `@firebase/ai@3.1.0` `ai-public.d.ts` |
+| On-device structured output | ✅ `onDeviceParams.promptOptions.responseConstraint` (JSON Schema object) | same |
+| **ONLY_ON_DEVICE silently uses the cloud when `LanguageModel` is missing** | ✅ Confirmed in source (`chromeAdapterFactory` + `callCloudOrDevice`) and proven by `tests/sdkFallthrough.test.ts` | `@firebase/ai@3.1.0` `index.esm.js` |
 
 ### Consequence for the architecture (needs your sign-off)
 In the brief, Step 1 is "ONLY_ON_DEVICE (Gemini Nano)" transcription. The Firebase hybrid SDK **cannot** do on-device audio. Proposed approach:

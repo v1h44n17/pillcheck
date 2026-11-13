@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 1 of 17**, project scaffold (Firebase, App Check, anonymous auth, device readiness check). See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 2 of 17**, fail-closed on-device guard, one-time on-device setup, spoken refusal. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -34,7 +34,25 @@ The routing policy is the product. Each step is pinned to one place, on purpose.
 ### Fail-closed, not fail-open
 If on-device AI isn't available, PillCheck says **"I can't check safely on this device"** and stops.
 
-> **Verified SDK behaviour (firebase@13.3.0 / @firebase/ai@3.1.0):** the SDK only creates its on-device adapter when `globalThis.LanguageModel` exists. If it doesn't, `callCloudOrDevice()` sends the request **to the cloud even in `ONLY_ON_DEVICE` mode**. PillCheck therefore checks for the on-device model *itself*, before any private text reaches the SDK, and also asserts `response.inferenceSource === InferenceSource.ON_DEVICE` (`"on_device"`) afterwards. See [`src/guards/capabilities.ts`](src/guards/capabilities.ts).
+> **Verified SDK behaviour (firebase@13.3.0 / @firebase/ai@3.1.0):** the SDK only creates its on-device adapter when `globalThis.LanguageModel` exists. If it doesn't, `callCloudOrDevice()` sends the request **to the cloud even in `ONLY_ON_DEVICE` mode**. [`tests/sdkFallthrough.test.ts`](tests/sdkFallthrough.test.ts) proves it against the real SDK: a transcript containing a patient's name is sent to `firebasevertexai.googleapis.com`, and the response reports `inferenceSource: "in_cloud"`.
+>
+> PillCheck's [on-device guard](src/guards/onDeviceGuard.ts) therefore:
+> 1. **checks before every on-device step** (`assertNanoReady`, `assertLocalSpeechReady`), so private text never reaches the SDK unless Gemini Nano is present and ready;
+> 2. **checks after every on-device step** (`assertRanOnDevice(response.inferenceSource)`), so any SDK regression fails loudly instead of leaking quietly;
+> 3. **treats "can't tell" as "no"**: a missing API, a thrown error or an unknown state all mean refusal.
+>
+> When it refuses, the big button still works: it **says** the refusal out loud with a local voice, so Meera hears why nothing happened.
+
+### Testing the refusal (no on-device model)
+
+| How | What you should see |
+|---|---|
+| `http://localhost:5173/?simulate=no-nano` | Refusal; helper details say "Turned off on purpose for this demo" |
+| `?simulate=no-speech` or `?simulate=no-nano,no-speech` | Same, for speech or both |
+| A Chrome profile with the Gemini Nano flag **off**, or any non-Chrome browser | Refusal: "doesn't offer Gemini Nano" |
+| Press **Check my medicine** on the refusal screen | It speaks: "I can't check safely on this device…" |
+
+`?simulate` works in production builds on purpose: it can only *remove* capabilities, never add or bypass one.
 
 ## Architecture
 
@@ -85,6 +103,10 @@ flowchart LR
    ```
 4. **App Check debug token:** open http://localhost:5173, copy the debug token printed in the browser console, and add it under App Check → Apps → ⋮ → *Manage debug tokens*. Reload.
 
+   *Tip:* set `VITE_APPCHECK_DEBUG_TOKEN` in `.env.local` to a fixed UUID (`uuidgen`) and register that value once; then every local browser shares it.
+5. **One-time on-device setup:** if speech recognition or Gemini Nano isn't downloaded yet, PillCheck shows **Set up PillCheck**. Click it once; it installs the US-English speech pack and downloads Gemini Nano, with progress.
+6. **Tests:** `npm test` (unit tests for the guard plus the SDK fall-through evidence test).
+
 You should see the **System check** panel with Firebase ✓, App Check ✓, Anonymous sign-in ✓ and the on-device capability rows.
 
 ## Demo script (draft, finalised on Day 15)
@@ -99,8 +121,10 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 
 ```
 src/firebase/     App, App Check, Auth (AI Logic, Firestore, Remote Config to come)
-src/guards/       on-device capability probe → fail-closed guard (Day 2), leak guard (Day 5)
-src/pipeline/     Steps 1–5 + routing policy as code (Days 3–7)
+src/guards/       onDeviceGuard.ts (fail-closed, Day 2) · leak guard (Day 5)
+src/pipeline/     step4-speak.ts (local voices only) · Steps 1–3, 5 + routing policy (Days 3–7)
+src/ui/           RefusalScreen, SetupCard, SystemCheck
+tests/            onDeviceGuard.test.ts · sdkFallthrough.test.ts (evidence)
 docs/             plan, architecture, evidence, demo script
 ```
 

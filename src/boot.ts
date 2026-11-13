@@ -20,13 +20,19 @@ export async function boot(): Promise<BootReport> {
 
   const app = getFirebaseApp(cfg.options);
 
-  let appCheckMode: AppCheckMode;
+  let appCheckMode: AppCheckMode | undefined;
   try {
     const started = startAppCheck(app);
     appCheckMode = started.mode;
     await verifyAppCheck(started.appCheck);
   } catch (e) {
-    return { ok: false, stage: "appcheck", error: message(e) };
+    const raw = message(e);
+    // 403 in debug mode almost always means this browser's debug token isn't registered yet.
+    const error =
+      appCheckMode === "debug" && raw.includes("403")
+        ? "Debug token not registered. Copy it from the browser console, then add it in Firebase → App Check → Apps → ⋮ → Manage debug tokens, and reload."
+        : raw;
+    return { ok: false, stage: "appcheck", error, appCheckMode };
   }
 
   try {

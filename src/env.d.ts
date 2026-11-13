@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_RECAPTCHA_ENTERPRISE_SITE_KEY?: string;
   /** "true" enables the App Check debug provider. Honoured in dev builds ONLY. */
   readonly VITE_APPCHECK_DEBUG?: string;
+  /** Optional fixed debug token (UUID) registered in the console. Dev builds only. Never commit. */
+  readonly VITE_APPCHECK_DEBUG_TOKEN?: string;
 }
 
 interface ImportMeta {
