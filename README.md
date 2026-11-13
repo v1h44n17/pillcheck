@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 5 of 17**, Steps 1–2 plus the **leak guard**: speak a question, Gemini Nano pulls out the medicine names on-device, and the leak guard decides exactly what may go to the cloud. Nothing is sent yet (Step 3 is Day 6). See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 6 of 17**: **the full question → answer loop works.** Speak, Gemini Nano extracts the medicine names on-device, the leak guard rebuilds a names-only payload, cloud Gemini checks it against official FDA labels, and the answer is read aloud with a local voice. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -100,6 +100,30 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 
 **Demo the block:** open `http://localhost:5173/?simulate=inject-pii`, press the button and say "Can I take ibuprofen?". A fictional name and birthday are added after Nano (simulating a model that leaked them), and you get **🛑 Stopped before sending**: *"What looks like a person's name: 'Meera Sharma'"*, *"A date: '12/03/1951'"*, *Nothing left this device*.
 
+### Step 3: the interaction check (cloud Gemini, `ONLY_IN_CLOUD`)
+
+[`step3-check.ts`](src/pipeline/step3-check.ts) is the only step that sends anything off the device:
+
+1. **Leak guard again, inside Step 3** (`assertSafeToSend`), immediately before the network, so no caller can skip it.
+2. **Grounding in official FDA labels.** [`labelGrounding.ts`](src/pipeline/labelGrounding.ts) fetches the *drug interactions*, *boxed warning*, *ask a doctor* and *use in older adults* sections from the public openFDA label API, for the cleaned ingredient names only.
+3. **Gemini, `InferenceMode.ONLY_IN_CLOUD`**, behind App Check with limited-use tokens, returns JSON (`responseSchema`): `verdict` (ok / caution / avoid / unsure), `spoken` (1–3 sentences, under 50 words, written to be heard), optional `waitHours`, and `interactions`.
+4. **Validation before Meera hears anything:** the verdict must be one of the four; at most 3 sentences; interactions may only name medicines that were actually sent; `waitHours` must be 1–48.
+5. **Personalised on-device:** the cloud saw `calcium carbonate`, but Meera said "Tums", so the name she used is put back locally after the answer arrives.
+
+**Why the cloud for this step, and no on-device fallback:** a safety call about drug interactions needs the larger model plus label grounding. If the cloud is unreachable, PillCheck says *"I couldn't check right now… ask your pharmacist"*. It never lets Nano say "that's safe".
+
+**Cloud models, tried in order:** `gemini-3.5-flash-lite`, then `gemini-3.8-flash` (both cloud, same payload). Measured on 14 Nov 2026: flash-lite answered correctly in about 6–12 s, while 3.8-flash was returning *500 "high demand"*. Remote Config takes over this list on Day 9.
+
+**Live results** (real Gemini, real FDA labels):
+
+| Asked | Verdict | Spoken answer |
+|---|---|---|
+| Advil, while on warfarin | **avoid** | "Please don't take ibuprofen while you are on warfarin. Using them together greatly raises your risk of serious bleeding. Check with your doctor or pharmacist first." |
+| Synthroid + Tums | **caution**, waitHours 4 | "…you need to wait at least four hours between them so your body can absorb your thyroid medicine properly." |
+| Tylenol, while on warfarin + lisinopril | **caution** | "…taking acetaminophen while you take warfarin requires caution because it can affect your bleeding risk…" |
+
+**Try Step 3 without speaking (dev builds):** `await __pillcheck.check(["advil"], ["warfarin"])` in the console at localhost.
+
 **Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, and two badges: 🔒 *Heard on this device* and 🔒 *Understood on this device*. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
@@ -172,9 +196,9 @@ src/firebase/     App, App Check, Auth, AI Logic instance (Firestore, Remote Con
 src/guards/       onDeviceGuard.ts (fail-closed) · leakGuard.ts (what may leave the device)
 src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts
 scripts/          build-lexicon.ts
-src/pipeline/     policy.ts (routing policy) · step1-transcribe · step2-extract · step4-speak · Steps 3, 5 (Days 6–7)
+src/pipeline/     policy.ts (routing policy) · step1-transcribe · step2-extract · step3-check · labelGrounding · step4-speak · Step 5 (Day 7)
 src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
-tests/            onDeviceGuard · step1-transcribe · step2-extract · leakGuard · lexicon · sdkFallthrough (evidence + control)
+tests/            onDeviceGuard · step1-transcribe · step2-extract · step3-check · leakGuard · lexicon · sdkFallthrough (evidence + control)
 docs/             plan, architecture, evidence, demo script
 ```
 

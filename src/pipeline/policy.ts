@@ -48,10 +48,11 @@ export const ROUTING_POLICY = {
   check: {
     label: "Checked in the cloud",
     where: "cloud",
-    engine: "Gemini (cloud) via Firebase AI Logic, behind App Check",
+    engine: "Gemini (cloud) via Firebase AI Logic, behind App Check, grounded in openFDA drug labels",
     firebaseMode: InferenceMode.ONLY_IN_CLOUD,
     onUnavailable: "retry-later",
-    leavesDevice: "Only drug names that passed the leak guard. No audio, transcript, name or other identity.",
+    leavesDevice:
+      "Only canonical ingredient names rebuilt by the leak guard, sent to Gemini and to the public openFDA label API. No audio, transcript, name or other identity.",
   },
   speak: {
     label: "Spoken on this device",

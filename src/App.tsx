@@ -13,6 +13,7 @@ import { withDemoInjection } from "./pipeline/demoInjection";
 import { ListenError, listenOnce, type ListenHandle } from "./pipeline/step1-transcribe";
 import { blockedSpokenMessage } from "./ui/GuardResult";
 import { ExtractionError, extractMedicines } from "./pipeline/step2-extract";
+import { CheckAnswerError, CheckUnavailableError, checkInteractions } from "./pipeline/step3-check";
 import { speakLocally } from "./pipeline/step4-speak";
 import {
   CHECK_ERROR_MESSAGE,
@@ -99,8 +100,18 @@ export function App() {
         // ?simulate=inject-pii adds a fictional name + birthday here to demo a block.
         const { medicines, injected } = withDemoInjection(extracted.medicines);
         const guard = scanOutbound({ medicines });
-        setCheck({ phase: "understood", text: heard.text, guard, injected });
-        if (!guard.ok) void speakLocally(blockedSpokenMessage(guard.findings));
+        setCheck({ phase: "understood", text: heard.text, guard, injected, checking: guard.ok });
+        if (!guard.ok) {
+          void speakLocally(blockedSpokenMessage(guard.findings));
+          return;
+        }
+
+        // Step 3: the only cloud step. checkInteractions() re-runs the leak guard itself
+        // immediately before the network, then sends canonical ingredient names only.
+        const answer = await checkInteractions({ medicines });
+        setCheck({ phase: "answered", text: heard.text, answer });
+        // Step 4: speak it with a local voice.
+        void speakLocally(answer.spoken);
       })
       .catch(async (e: unknown) => {
         if (e instanceof OnDeviceUnavailableError || e instanceof RoutingViolationError) {
@@ -122,7 +133,14 @@ export function App() {
               ? "no-medicine"
               : e instanceof ExtractionError
                 ? "not-understood"
-                : "failed";
+                : e instanceof CheckUnavailableError
+                  ? "check-unavailable"
+                  : e instanceof CheckAnswerError
+                    ? "check-failed"
+                    : "failed";
+        if (e instanceof CheckUnavailableError || e instanceof CheckAnswerError) {
+          console.error("PillCheck Step 3:", e.message); // drug names at most, never the transcript
+        }
         if (kind === "aborted") return setCheck({ phase: "idle" });
         setCheck({ phase: "error", kind });
         void speakLocally(CHECK_ERROR_MESSAGE[kind]);
@@ -152,7 +170,11 @@ export function App() {
           <button
             className={`big-button${check.phase === "listening" ? " is-listening" : ""}`}
             type="button"
-            disabled={state === undefined || check.phase === "understanding"}
+            disabled={
+              state === undefined ||
+              check.phase === "understanding" ||
+              (check.phase === "understood" && check.checking)
+            }
             aria-pressed={check.phase === "listening"}
             onClick={onCheckPressed}
           >

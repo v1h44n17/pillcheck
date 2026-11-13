@@ -1,15 +1,19 @@
 import type { LeakGuardResult } from "../guards/leakGuard";
 import { ROUTING_POLICY } from "../pipeline/policy";
 import type { ListenErrorKind } from "../pipeline/step1-transcribe";
+import type { InteractionAnswer } from "../pipeline/step3-check";
+import { AnswerCard } from "./AnswerCard";
 import { GuardResult } from "./GuardResult";
 
-export type CheckErrorKind = ListenErrorKind | "no-medicine" | "not-understood";
+export type CheckErrorKind = ListenErrorKind | "no-medicine" | "not-understood" | "check-unavailable" | "check-failed";
 
 export type CheckState =
   | { phase: "idle" }
   | { phase: "listening"; interim: string }
   | { phase: "understanding"; text: string }
-  | { phase: "understood"; text: string; guard: LeakGuardResult; injected: boolean }
+  /** Guard result shown; if it passed, Step 3 is running ("checking"). */
+  | { phase: "understood"; text: string; guard: LeakGuardResult; injected: boolean; checking: boolean }
+  | { phase: "answered"; text: string; answer: InteractionAnswer }
   | { phase: "error"; kind: CheckErrorKind };
 
 /** Short, plain, spoken-style messages. Each one tells Meera what to do next. */
@@ -21,6 +25,8 @@ export const CHECK_ERROR_MESSAGE: Record<CheckErrorKind, string> = {
   failed: "Something went wrong while listening. Please press the button and try again.",
   "no-medicine": "I didn't catch the name of a medicine. Press the button and say the medicine's name.",
   "not-understood": "Sorry, I didn't understand that. Press the button and try again.",
+  "check-unavailable": "I couldn't check right now. Please try again in a minute, or ask your pharmacist.",
+  "check-failed": "I couldn't get a clear answer. Please ask your pharmacist before taking it.",
 };
 
 function DeviceChip({ label }: { label: string }) {
@@ -66,10 +72,25 @@ export function ListeningPanel({ state }: { state: CheckState }) {
           <DeviceChip label={ROUTING_POLICY.transcribe.label} />
           {state.phase === "understood" && <DeviceChip label={ROUTING_POLICY.extract.label} />}
         </p>
-        {state.phase === "understood" && state.guard.ok && (
-          <p className="hint">Next in the build: checking these in the cloud (Day 6).</p>
+        {state.phase === "understood" && state.checking && (
+          <p className="listen-status">
+            <span className="listen-dot listen-dot-think" aria-hidden="true" />
+            Checking in the cloud…
+          </p>
         )}
       </section>
+    );
+  }
+
+  if (state.phase === "answered") {
+    return (
+      <>
+        <section className="listen" aria-label="Your question">
+          <p className="listen-label">You asked:</p>
+          <p className="listen-words">“{state.text}”</p>
+        </section>
+        <AnswerCard answer={state.answer} />
+      </>
     );
   }
 
