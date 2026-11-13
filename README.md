@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 7 of 17**: **all five steps are wired** through one [pipeline](src/pipeline/orchestrator.ts): on-device listening → Gemini Nano → leak guard → cloud Gemini + FDA labels → local voice → a privacy-safe Firestore audit entry. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 8 of 17**: all five steps run through one [pipeline](src/pipeline/orchestrator.ts), and Meera has **her own medicine list** (added by voice, kept on her device), so "Can I take Advil?" is checked against everything she already takes. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -148,6 +148,16 @@ It's private by construction, with three layers:
 
 Audit writes are fire-and-forget: a slow or offline Firestore never delays the spoken answer.
 
+### My medicines: kept on the device
+
+Meera (or a family member, once) presses **＋ Add a medicine** and says *"I take Coumadin and Lipitor"*. From then on, every check includes them as `already_taking`.
+
+- **Stored only in this browser** ([`cabinet.ts`](src/cabinet/cabinet.ts), `localStorage`), never in Firestore. A list of someone's medicines is health data, and the anonymous account belongs to this browser anyway, so the cloud would add risk without adding sync.
+- **Added using Steps 1–2 only** ([`addByVoice.ts`](src/cabinet/addByVoice.ts)): on-device speech → Gemini Nano → lexicon. **No network request at all**, and a test asserts `fetch` is never called.
+- **Only recognised medicines can be stored**, and stored data is re-checked against the lexicon on every load. So the list can't hold a name or a note, even if someone edits storage by hand.
+- **Leaves the device only inside a check**, as canonical ingredient names after the leak guard. Gemini sees `warfarin`, and Meera still hears *"Please don't take Advil with your **Coumadin**…"* (live result), because her names are put back on-device.
+- **Removing takes two taps** ("Remove" → "Tap again to remove"), so one stray tap can't silently take warfarin off the list every check depends on.
+
 ### The pipeline in one file
 
 [`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
@@ -232,7 +242,8 @@ src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated)
 scripts/          build-lexicon.ts
 src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
 firestore.rules   per-user, append-only, schema-checked audit log
-src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
+src/cabinet/      cabinet.ts (on-device medicine list) · addByVoice.ts · useCabinet.ts
+src/ui/           RefusalScreen, SetupCard, ListeningPanel, GuardResult, AnswerCard, CabinetCard, SystemCheck
 tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
 docs/             plan, architecture, evidence, demo script
 ```

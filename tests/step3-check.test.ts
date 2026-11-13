@@ -107,6 +107,15 @@ describe("checkInteractions: answers and failures", () => {
     expect(a.inferenceSource).toBe("in_cloud");
   });
 
+  it("uses her names for medicines on her list too (Coumadin, not warfarin)", async () => {
+    const a = await checkInteractions(
+      { medicines: ["Advil"], cabinet: ["Coumadin"] },
+      { fetchImpl: labelFetch(), models: [{ name: "primary", model: model(ANSWER) }] as unknown as Models },
+    );
+    expect(a.sent).toEqual({ medicines: ["ibuprofen"], cabinet: ["warfarin"] });
+    expect(a.spoken).toBe("Please don't take Advil with Coumadin. It raises your bleeding risk. Ask your pharmacist first.");
+  });
+
   it("moves to the backup cloud model when the first is busy", async () => {
     const busy = model(new Error("[500] This model is currently experiencing high demand"));
     const backup = model(ANSWER);

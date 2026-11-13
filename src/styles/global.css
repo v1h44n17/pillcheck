@@ -233,6 +233,39 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 }
 .secondary-button:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; }
 
+/* --- My medicines (cabinet) --- */
+.cabinet {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.8rem;
+}
+.cabinet h2 { font-size: 1.4rem; margin: 0; }
+.cabinet p { margin: 0; }
+.cabinet-empty { font-size: 1.15rem; color: var(--ink-soft); }
+.cabinet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.cabinet-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  border: 2px solid var(--line); border-radius: 14px;
+}
+.cabinet-name { font-size: 1.35rem; font-weight: 800; display: grid; overflow-wrap: anywhere; }
+.cabinet-generic { font-size: 1rem; font-weight: 500; color: var(--ink-soft); }
+.remove-button {
+  flex: none;
+  min-height: 3rem; min-width: 6.5rem; padding: 0 1rem;
+  border-radius: 12px; border: 2px solid var(--ink-soft);
+  background: transparent; color: var(--ink); font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer;
+}
+.remove-button.is-armed { border-color: var(--fail); background: var(--fail); color: var(--surface); }
+.remove-button:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+.add-button { min-height: 4rem; font-size: 1.3rem; }
+.add-button.is-listening { background: var(--ink); color: var(--bg); }
+.add-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.cabinet-result { font-size: 1.2rem; font-weight: 700; }
+
 /* --- Leak guard --- */
 .med-generic { font-weight: 600; font-size: 1.1rem; opacity: 0.9; }
 .guard-ok { margin: 0; font-size: 1.05rem; color: var(--ink-soft); }

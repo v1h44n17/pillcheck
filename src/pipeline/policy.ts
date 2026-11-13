@@ -62,6 +62,15 @@ export const ROUTING_POLICY = {
     onUnavailable: "show-text-only",
     leavesDevice: "Nothing. Network voices are never used.",
   },
+  cabinet: {
+    label: "Your list stays on this device",
+    where: "on-device",
+    engine: "This browser's local storage. Added by voice using Steps 1–2 only; no network call",
+    firebaseMode: null,
+    onUnavailable: "show-text-only",
+    leavesDevice:
+      "Nothing while stored. During a check, only the canonical ingredient names, inside the Step 3 payload, after the leak guard.",
+  },
   audit: {
     label: "Logged",
     where: "cloud",

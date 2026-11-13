@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { boot, type BootReport } from "./boot";
+import { addByVoice, defaultAddDeps } from "./cabinet/addByVoice";
+import { cabinet } from "./cabinet/cabinet";
+import { useCabinet } from "./cabinet/useCabinet";
 import { checkReadiness, countLocalVoices, setupOnDevice, type Readiness } from "./guards/onDeviceGuard";
+import { CabinetCard, type AddState } from "./ui/CabinetCard";
 import { REFUSAL_SPOKEN } from "./pipeline/messages";
 import { defaultDeps, runCheck, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
 import { speakLocally } from "./pipeline/step4-speak";
@@ -23,6 +27,9 @@ export function App() {
   const [check, setCheck] = useState<CheckState>({ phase: "idle" });
   const run = useRef<RunHandle | null>(null);
   const runId = useRef(0);
+  const medicines = useCabinet();
+  const [addState, setAddState] = useState<AddState>({ phase: "idle" });
+  const adding = useRef<ReturnType<typeof addByVoice> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -66,15 +73,50 @@ export function App() {
     // Never let the microphone hear PillCheck's own voice (e.g. a previous answer).
     if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
     run.current?.cancel();
+    setAddState({ phase: "idle" });
 
     // Only the newest run may update the screen (an old cloud answer must not overwrite a new question).
     const id = ++runId.current;
-    const handle = runCheck(defaultDeps, (e) => {
+    // Her medicine list goes in as `cabinet`; the leak guard maps it to ingredient names.
+    const deps = { ...defaultDeps, cabinet: () => cabinet.namesForCheck() };
+    const handle = runCheck(deps, (e) => {
       if (id === runId.current) onPipelineEvent(e);
     });
     run.current = handle;
     void handle.done.finally(() => {
       if (run.current === handle) run.current = null;
+    });
+  }
+
+  /** "Add a medicine": on-device listening + Nano + lexicon. No network. */
+  function onAddPressed() {
+    if (addState.phase === "listening" && adding.current) {
+      adding.current.stop();
+      return;
+    }
+    if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
+    setCheck({ phase: "idle" });
+    const handle = addByVoice(defaultAddDeps, (e) => {
+      switch (e.type) {
+        case "listening":
+          return setAddState({ phase: "listening", interim: e.interim });
+        case "understanding":
+          return setAddState({ phase: "understanding", text: e.text });
+        case "added":
+          return setAddState({ phase: "added", results: e.results });
+        case "error":
+          return setAddState({ phase: "error", kind: e.kind });
+        case "idle":
+          return setAddState({ phase: "idle" });
+        case "refused":
+          setAddState({ phase: "idle" });
+          void checkReadiness().then(setReadiness);
+          return;
+      }
+    });
+    adding.current = handle;
+    void handle.done.finally(() => {
+      if (adding.current === handle) adding.current = null;
     });
   }
 
@@ -124,7 +166,9 @@ export function App() {
             disabled={
               state === undefined ||
               check.phase === "understanding" ||
-              (check.phase === "understood" && check.checking)
+              (check.phase === "understood" && check.checking) ||
+              addState.phase === "listening" ||
+              addState.phase === "understanding"
             }
             aria-pressed={check.phase === "listening"}
             onClick={onCheckPressed}
@@ -139,6 +183,20 @@ export function App() {
       )}
 
       {state === "ready" && <ListeningPanel state={check} />}
+
+      {state === "ready" && (
+        <CabinetCard
+          items={medicines}
+          addState={addState}
+          busy={
+            check.phase === "listening" ||
+            check.phase === "understanding" ||
+            (check.phase === "understood" && check.checking)
+          }
+          onAdd={onAddPressed}
+          onRemove={(heard) => cabinet.remove(heard)}
+        />
+      )}
 
       {state === "unsupported" && readiness && <RefusalScreen readiness={readiness} />}
 

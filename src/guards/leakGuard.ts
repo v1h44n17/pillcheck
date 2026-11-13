@@ -68,7 +68,7 @@ export interface SanitisedPayload {
 }
 
 export type LeakGuardResult =
-  | { ok: true; payload: SanitisedPayload; matches: MedicineMatch[] }
+  | { ok: true; payload: SanitisedPayload; matches: MedicineMatch[]; cabinetMatches: MedicineMatch[] }
   | { ok: false; findings: Finding[] };
 
 export class LeakBlockedError extends Error {
@@ -184,12 +184,16 @@ export function scanOutbound(request: unknown): LeakGuardResult {
   if (JSON.stringify(payload).length > LIMITS.payloadChars) {
     return { ok: false, findings: [{ kind: "too-long", value: "payload", field: "(root)" }] };
   }
-  return { ok: true, payload, matches: meds.matches };
+  return { ok: true, payload, matches: meds.matches, cabinetMatches: cab.matches };
 }
 
 /** Throws LeakBlockedError on any finding. Returns the ONLY payload allowed to leave. */
-export function assertSafeToSend(request: unknown): { payload: SanitisedPayload; matches: MedicineMatch[] } {
+export function assertSafeToSend(request: unknown): {
+  payload: SanitisedPayload;
+  matches: MedicineMatch[];
+  cabinetMatches: MedicineMatch[];
+} {
   const result = scanOutbound(request);
   if (!result.ok) throw new LeakBlockedError(result.findings);
-  return { payload: result.payload, matches: result.matches };
+  return { payload: result.payload, matches: result.matches, cabinetMatches: result.cabinetMatches };
 }

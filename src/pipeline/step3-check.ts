@@ -211,7 +211,7 @@ export interface CheckOptions {
 
 export async function checkInteractions(request: OutboundRequest, opts: CheckOptions = {}): Promise<InteractionAnswer> {
   // 1. LEAK GUARD, here, immediately before the network. Throws LeakBlockedError.
-  const { payload, matches } = assertSafeToSend(request);
+  const { payload, matches, cabinetMatches } = assertSafeToSend(request);
 
   const candidates =
     opts.models ??
@@ -247,7 +247,8 @@ export async function checkInteractions(request: OutboundRequest, opts: CheckOpt
 
       return {
         ...answer,
-        spoken: personaliseSpoken(answer.spoken, matches),
+        // Her names for BOTH the new medicine and the ones she already takes.
+        spoken: personaliseSpoken(answer.spoken, [...matches, ...cabinetMatches]),
         sent: payload,
         matches,
         grounded: excerpts.map((e) => e.ingredient),
