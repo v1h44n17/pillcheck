@@ -29,8 +29,45 @@ declare global {
     processLocally?: boolean;
   }
 
+  interface SpeechRecognitionAlternativeLike {
+    readonly transcript: string;
+    readonly confidence: number;
+  }
+
+  interface SpeechRecognitionResultLike {
+    readonly isFinal: boolean;
+    readonly length: number;
+    readonly [index: number]: SpeechRecognitionAlternativeLike;
+  }
+
+  interface SpeechRecognitionEventLike {
+    readonly resultIndex: number;
+    readonly results: { readonly length: number; readonly [index: number]: SpeechRecognitionResultLike };
+  }
+
+  interface SpeechRecognitionErrorEventLike {
+    readonly error: string;
+    readonly message?: string;
+  }
+
+  /** The members PillCheck uses on a SpeechRecognition instance. */
+  interface SpeechRecognitionLike {
+    lang: string;
+    continuous: boolean;
+    interimResults: boolean;
+    maxAlternatives: number;
+    /** Chrome: true = recognise on-device only. Absent on browsers that can't. */
+    processLocally?: boolean;
+    onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+    onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null;
+    onend: (() => void) | null;
+    start(): void;
+    stop(): void;
+    abort(): void;
+  }
+
   interface SpeechRecognitionStatic {
-    new (): unknown;
+    new (): SpeechRecognitionLike;
     /** Present in Chrome builds that support on-device recognition. */
     available?(options: SpeechRecognitionOptions): Promise<OnDeviceAvailability>;
     install?(options: SpeechRecognitionOptions): Promise<boolean>;

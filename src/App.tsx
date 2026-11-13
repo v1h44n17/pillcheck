@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { boot, type BootReport } from "./boot";
 import {
   checkReadiness,
   countLocalVoices,
+  OnDeviceUnavailableError,
   setupOnDevice,
   type Readiness,
 } from "./guards/onDeviceGuard";
+import { ListenError, listenOnce, type ListenHandle } from "./pipeline/step1-transcribe";
 import { speakLocally } from "./pipeline/step4-speak";
+import { LISTEN_ERROR_MESSAGE, ListeningPanel, type CheckState } from "./ui/ListeningPanel";
 import { REFUSAL_SPOKEN, RefusalScreen } from "./ui/RefusalScreen";
 import { SetupCard, type SetupState } from "./ui/SetupCard";
 import { SystemCheck } from "./ui/SystemCheck";
@@ -22,6 +25,8 @@ export function App() {
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [voices, setVoices] = useState<number | null>(null);
   const [setup, setSetup] = useState<SetupState>({ phase: "idle" });
+  const [check, setCheck] = useState<CheckState>({ phase: "idle" });
+  const listening = useRef<ListenHandle | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -55,7 +60,38 @@ export function App() {
       void speakLocally(REFUSAL_SPOKEN);
       return;
     }
-    // Day 3: Step 1, on-device listening.
+
+    // Second press while listening = "I'm done talking".
+    if (listening.current) {
+      listening.current.stop();
+      return;
+    }
+
+    // Never let the microphone hear PillCheck's own voice.
+    if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
+
+    setCheck({ phase: "listening", interim: "" });
+    const handle = listenOnce({ onInterim: (interim) => setCheck({ phase: "listening", interim }) });
+    listening.current = handle;
+
+    handle.result
+      .then((t) => setCheck({ phase: "heard", text: t.text }))
+      .catch(async (e: unknown) => {
+        if (e instanceof OnDeviceUnavailableError) {
+          // Privacy problem: re-check and show the refusal; never retry in the cloud.
+          setCheck({ phase: "idle" });
+          setReadiness(await checkReadiness());
+          void speakLocally(REFUSAL_SPOKEN);
+          return;
+        }
+        const kind = e instanceof ListenError ? e.kind : "failed";
+        if (kind === "aborted") return setCheck({ phase: "idle" });
+        setCheck({ phase: "error", kind });
+        void speakLocally(LISTEN_ERROR_MESSAGE[kind]);
+      })
+      .finally(() => {
+        listening.current = null;
+      });
   }
 
   const state = readiness?.overall;
@@ -76,17 +112,22 @@ export function App() {
       ) : (
         <>
           <button
-            className="big-button"
+            className={`big-button${check.phase === "listening" ? " is-listening" : ""}`}
             type="button"
-            disabled={state === undefined || state === "ready"}
+            disabled={state === undefined}
+            aria-pressed={check.phase === "listening"}
             onClick={onCheckPressed}
           >
-            Check my medicine
+            {check.phase === "listening" ? "I'm done talking" : "Check my medicine"}
           </button>
           {state === undefined && <p className="hint">Getting ready…</p>}
-          {state === "ready" && <p className="hint">Ready. Listening arrives on Day 3 of the build.</p>}
+          {state === "ready" && check.phase === "idle" && (
+            <p className="hint">Press the button, then say the name of your medicine.</p>
+          )}
         </>
       )}
+
+      {state === "ready" && <ListeningPanel state={check} />}
 
       {state === "unsupported" && readiness && <RefusalScreen readiness={readiness} />}
 

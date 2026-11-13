@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 2 of 17**, fail-closed on-device guard, one-time on-device setup, spoken refusal. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 3 of 17**, Step 1 works: press the button, speak, and see what PillCheck heard, recognised entirely on-device. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -20,7 +20,7 @@ Meera is 74, lives alone and takes five medicines. When she isn't sure two pills
 
 ## How hybrid inference is used: the routing policy
 
-The routing policy is the product. Each step is pinned to one place, on purpose. Nothing falls back to the cloud silently.
+The routing policy is the product. Each step is pinned to one place, on purpose. Nothing falls back to the cloud silently. The policy lives in code at [`src/pipeline/policy.ts`](src/pipeline/policy.ts), and the UI's "Heard on this device" style labels come from it.
 
 | Step | What | Where | Firebase AI Logic mode | Leaves the device? |
 |---|---|---|---|---|
@@ -53,6 +53,17 @@ If on-device AI isn't available, PillCheck says **"I can't check safely on this 
 | Press **Check my medicine** on the refusal screen | It speaks: "I can't check safely on this device…" |
 
 `?simulate` works in production builds on purpose: it can only *remove* capabilities, never add or bypass one.
+
+### Step 1: how "on-device listening" is enforced
+
+[`step1-transcribe.ts`](src/pipeline/step1-transcribe.ts) refuses unless **all** of these hold:
+1. the on-device guard reports the US-English speech pack as `available`;
+2. the recogniser exposes `processLocally`, and reading it back after setting it to `true` returns `true`;
+3. no `network` error occurs. On-device recognition needs no network, so a network error means the browser tried a server, and PillCheck refuses instead of retrying.
+
+The transcript lives only in memory: it isn't logged, stored or sent.
+
+**Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …" with a 🔒 *Heard on this device* badge. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
 
@@ -122,9 +133,9 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 ```
 src/firebase/     App, App Check, Auth (AI Logic, Firestore, Remote Config to come)
 src/guards/       onDeviceGuard.ts (fail-closed, Day 2) · leak guard (Day 5)
-src/pipeline/     step4-speak.ts (local voices only) · Steps 1–3, 5 + routing policy (Days 3–7)
-src/ui/           RefusalScreen, SetupCard, SystemCheck
-tests/            onDeviceGuard.test.ts · sdkFallthrough.test.ts (evidence)
+src/pipeline/     policy.ts (routing policy) · step1-transcribe.ts · step4-speak.ts · Steps 2, 3, 5 (Days 4–7)
+src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
+tests/            onDeviceGuard · step1-transcribe · sdkFallthrough (evidence)
 docs/             plan, architecture, evidence, demo script
 ```
 
