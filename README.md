@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 3 of 17**, Step 1 works: press the button, speak, and see what PillCheck heard, recognised entirely on-device. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 4 of 17**, Steps 1–2 work: speak a question, and Gemini Nano pulls out the medicine names on-device. Nothing has left the device yet. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -63,7 +63,25 @@ If on-device AI isn't available, PillCheck says **"I can't check safely on this 
 
 The transcript lives only in memory: it isn't logged, stored or sent.
 
-**Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …" with a 🔒 *Heard on this device* badge. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
+### Step 2: the privacy airlock (Gemini Nano, `ONLY_ON_DEVICE`)
+
+[`step2-extract.ts`](src/pipeline/step2-extract.ts) turns the full transcript (which might include a name, a birthday or a dose) into a bare list such as `["advil", "warfarin"]`:
+
+- `getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE, onDeviceParams: { createOptions, promptOptions: { responseConstraint } } })`
+- **Guard before, check after:** `assertNanoReady()` runs before the transcript is handed to the SDK, and `assertRanOnDevice(response.inferenceSource)` runs on the result.
+- **Instructions go in `createOptions.initialPrompts` (role `system`), not `systemInstruction`.** Verified in the SDK source: the on-device path only forwards `createOptions` and the request contents to Chrome's Prompt API. A `systemInstruction` would silently never reach Nano.
+- **Structured output on-device:** a JSON Schema is passed as `responseConstraint`, so Nano must answer `{"medicines": [...]}` (max 5 names, 40 characters each). A first-pass clean-up drops anything with digits, `@`, `/` and the like. The full leak guard comes on Day 5.
+
+**Try it without speaking (dev builds only):** in the DevTools console at localhost, run
+
+```js
+await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil with my warfarin?")
+// → { medicines: ["advil", "warfarin"], where: "on-device", inferenceSource: "on_device" }
+```
+
+**Tests run the browser build of Firebase AI Logic.** Under Node, `firebase/ai` resolves to a build with *no* on-device adapter, where everything goes to the cloud. [`vitest.config.ts`](vitest.config.ts) aliases it to the browser build, and a control test proves that (Nano present → zero network requests).
+
+**Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, and two badges: 🔒 *Heard on this device* and 🔒 *Understood on this device*. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
 
@@ -131,11 +149,11 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 ## Repo map
 
 ```
-src/firebase/     App, App Check, Auth (AI Logic, Firestore, Remote Config to come)
+src/firebase/     App, App Check, Auth, AI Logic instance (Firestore, Remote Config to come)
 src/guards/       onDeviceGuard.ts (fail-closed, Day 2) · leak guard (Day 5)
-src/pipeline/     policy.ts (routing policy) · step1-transcribe.ts · step4-speak.ts · Steps 2, 3, 5 (Days 4–7)
+src/pipeline/     policy.ts (routing policy) · step1-transcribe · step2-extract · step4-speak · Steps 3, 5 (Days 6–7)
 src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
-tests/            onDeviceGuard · step1-transcribe · sdkFallthrough (evidence)
+tests/            onDeviceGuard · step1-transcribe · step2-extract · sdkFallthrough (evidence + control)
 docs/             plan, architecture, evidence, demo script
 ```
 

@@ -185,6 +185,17 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   border: 2px solid currentColor;
 }
 .chip-device { color: var(--ok); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
+
+/* --- Step 2: understood medicines --- */
+.listen-dot-think { background: var(--brand); }
+.med-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.med-list li {
+  font-size: 1.5rem; font-weight: 800;
+  padding: 0.4rem 1rem;
+  border-radius: 14px;
+  background: var(--brand); color: var(--brand-ink);
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

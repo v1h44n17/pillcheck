@@ -4,15 +4,25 @@ import {
   checkReadiness,
   countLocalVoices,
   OnDeviceUnavailableError,
+  RoutingViolationError,
   setupOnDevice,
   type Readiness,
 } from "./guards/onDeviceGuard";
 import { ListenError, listenOnce, type ListenHandle } from "./pipeline/step1-transcribe";
+import { ExtractionError, extractMedicines } from "./pipeline/step2-extract";
 import { speakLocally } from "./pipeline/step4-speak";
-import { LISTEN_ERROR_MESSAGE, ListeningPanel, type CheckState } from "./ui/ListeningPanel";
+import {
+  CHECK_ERROR_MESSAGE,
+  ListeningPanel,
+  type CheckErrorKind,
+  type CheckState,
+} from "./ui/ListeningPanel";
 import { REFUSAL_SPOKEN, RefusalScreen } from "./ui/RefusalScreen";
 import { SetupCard, type SetupState } from "./ui/SetupCard";
 import { SystemCheck } from "./ui/SystemCheck";
+
+/** Step 2 understood the question but found no medicine name in it. */
+class NoMedicineHeard extends Error {}
 
 /**
  * The screen is driven by on-device readiness (src/guards/onDeviceGuard.ts):
@@ -75,19 +85,38 @@ export function App() {
     listening.current = handle;
 
     handle.result
-      .then((t) => setCheck({ phase: "heard", text: t.text }))
+      .then(async (heard) => {
+        listening.current = null;
+        // Step 2: on-device understanding. The transcript never leaves this tab.
+        setCheck({ phase: "understanding", text: heard.text });
+        const { medicines } = await extractMedicines(heard.text);
+        if (medicines.length === 0) throw new NoMedicineHeard();
+        setCheck({ phase: "understood", text: heard.text, medicines });
+      })
       .catch(async (e: unknown) => {
-        if (e instanceof OnDeviceUnavailableError) {
+        if (e instanceof OnDeviceUnavailableError || e instanceof RoutingViolationError) {
           // Privacy problem: re-check and show the refusal; never retry in the cloud.
+          if (e instanceof RoutingViolationError) {
+            // Never log the transcript, only what went wrong.
+            console.error("PillCheck routing violation:", e.message);
+          }
           setCheck({ phase: "idle" });
-          setReadiness(await checkReadiness());
+          const r = await checkReadiness();
+          setReadiness(e instanceof RoutingViolationError ? { ...r, overall: "unsupported" } : r);
           void speakLocally(REFUSAL_SPOKEN);
           return;
         }
-        const kind = e instanceof ListenError ? e.kind : "failed";
+        const kind: CheckErrorKind =
+          e instanceof ListenError
+            ? e.kind
+            : e instanceof NoMedicineHeard
+              ? "no-medicine"
+              : e instanceof ExtractionError
+                ? "not-understood"
+                : "failed";
         if (kind === "aborted") return setCheck({ phase: "idle" });
         setCheck({ phase: "error", kind });
-        void speakLocally(LISTEN_ERROR_MESSAGE[kind]);
+        void speakLocally(CHECK_ERROR_MESSAGE[kind]);
       })
       .finally(() => {
         listening.current = null;
@@ -114,7 +143,7 @@ export function App() {
           <button
             className={`big-button${check.phase === "listening" ? " is-listening" : ""}`}
             type="button"
-            disabled={state === undefined}
+            disabled={state === undefined || check.phase === "understanding"}
             aria-pressed={check.phase === "listening"}
             onClick={onCheckPressed}
           >

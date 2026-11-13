@@ -1,22 +1,39 @@
 import { ROUTING_POLICY } from "../pipeline/policy";
 import type { ListenErrorKind } from "../pipeline/step1-transcribe";
 
+export type CheckErrorKind = ListenErrorKind | "no-medicine" | "not-understood";
+
 export type CheckState =
   | { phase: "idle" }
   | { phase: "listening"; interim: string }
-  | { phase: "heard"; text: string }
-  | { phase: "error"; kind: ListenErrorKind };
+  | { phase: "understanding"; text: string }
+  | { phase: "understood"; text: string; medicines: string[] }
+  | { phase: "error"; kind: CheckErrorKind };
 
 /** Short, plain, spoken-style messages. Each one tells Meera what to do next. */
-export const LISTEN_ERROR_MESSAGE: Record<ListenErrorKind, string> = {
+export const CHECK_ERROR_MESSAGE: Record<CheckErrorKind, string> = {
   "no-speech": "I didn't hear anything. Press the button and say the name of your medicine.",
   "mic-denied": "I need to use the microphone. Please allow it, then press the button again.",
   "no-mic": "I can't find a microphone. Please check it's plugged in, then press the button again.",
   aborted: "",
   failed: "Something went wrong while listening. Please press the button and try again.",
+  "no-medicine": "I didn't catch the name of a medicine. Press the button and say the medicine's name.",
+  "not-understood": "Sorry, I didn't understand that. Press the button and try again.",
 };
 
-/** What Meera sees while PillCheck listens, and what it heard. */
+function titleCase(s: string): string {
+  return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+function DeviceChip({ label }: { label: string }) {
+  return (
+    <span className="chip chip-device">
+      <span aria-hidden="true">🔒</span> {label}
+    </span>
+  );
+}
+
+/** What Meera sees while PillCheck listens, thinks, and what it understood. */
 export function ListeningPanel({ state }: { state: CheckState }) {
   if (state.phase === "idle") return null;
 
@@ -32,22 +49,42 @@ export function ListeningPanel({ state }: { state: CheckState }) {
     );
   }
 
-  if (state.phase === "heard") {
+  if (state.phase === "understanding" || state.phase === "understood") {
     return (
       <section className="listen" aria-live="polite">
         <p className="listen-label">You asked:</p>
         <p className="listen-words">“{state.text}”</p>
-        <p className="chip chip-device">
-          <span aria-hidden="true">🔒</span> {ROUTING_POLICY.transcribe.label}
+
+        {state.phase === "understanding" ? (
+          <p className="listen-status">
+            <span className="listen-dot listen-dot-think" aria-hidden="true" />
+            Understanding on this device…
+          </p>
+        ) : (
+          <>
+            <p className="listen-label">Medicine{state.medicines.length > 1 ? "s" : ""}:</p>
+            <ul className="med-list">
+              {state.medicines.map((m) => (
+                <li key={m}>{titleCase(m)}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <p className="chips">
+          <DeviceChip label={ROUTING_POLICY.transcribe.label} />
+          {state.phase === "understood" && <DeviceChip label={ROUTING_POLICY.extract.label} />}
         </p>
-        <p className="hint">Next in the build: understanding it on this device (Day 4).</p>
+        {state.phase === "understood" && (
+          <p className="hint">Next in the build: checking these in the cloud (Days 5–6).</p>
+        )}
       </section>
     );
   }
 
   return (
     <section className="listen listen-error" role="alert">
-      <p>{LISTEN_ERROR_MESSAGE[state.kind]}</p>
+      <p>{CHECK_ERROR_MESSAGE[state.kind]}</p>
     </section>
   );
 }

@@ -10,6 +10,11 @@
  *
  * If a future SDK version fixes this, the first test will fail. That's
  * intended: re-check the behaviour, then update this test and the README.
+ *
+ * vitest.config.ts aliases firebase/ai to its BROWSER build: the Node build has
+ * no on-device adapter at all, so it would "prove" this trivially. The control
+ * test below (Nano present → stays on-device) confirms the browser build is the
+ * one under test.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deleteApp, initializeApp } from "firebase/app";
@@ -53,6 +58,29 @@ describe("Firebase AI Logic SDK, ONLY_ON_DEVICE without a LanguageModel", () => 
       expect(url).toMatch(/^https:\/\/firebasevertexai\.googleapis\.com\//);
       expect(String(init.body)).toContain("Meera"); // the private transcript left the device
       expect(result.response.inferenceSource).toBe("in_cloud");
+    } finally {
+      await deleteApp(app);
+    }
+  });
+
+  it("control: with Gemini Nano present, the same call stays on-device (proves this is the browser build)", async () => {
+    const prompt = vi.fn(async () => "ibuprofen");
+    vi.stubGlobal("LanguageModel", {
+      availability: vi.fn(async () => "available"),
+      create: vi.fn(async () => ({ prompt, destroy: vi.fn() })),
+    });
+    const fetchSpy = vi.fn(async () => cloudResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const app = initializeApp(FAKE_CONFIG, `control-${Date.now()}`);
+    try {
+      const ai = getAI(app, { backend: new GoogleAIBackend() });
+      const model = getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE });
+      const result = await model.generateContent(PRIVATE_TRANSCRIPT);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(result.response.inferenceSource).toBe("on_device");
     } finally {
       await deleteApp(app);
     }
