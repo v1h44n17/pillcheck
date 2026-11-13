@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 11 of 17**: the full pipeline, an on-device medicine list, a live provenance strip, safe Remote Config, an age-friendly design (Lighthouse Accessibility 100, AAA contrast), a **privacy receipt** that reads back the user's own audit log, and **demo controls** (`?demo`) for the three demo beats. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 12 of 17**: **live at https://pillcheck-by-v1h44n.web.app** with **App Check enforced** (reCAPTCHA Enterprise / Fraud Defense) on Firebase AI Logic and Cloud Firestore, a strict Content Security Policy, and everything from Days 1–11: the full hybrid pipeline, on-device medicine list, provenance strip, safe Remote Config, age-friendly design, privacy receipt and demo controls (`?demo`). See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -201,6 +201,19 @@ Each step shows *waiting → in progress → done*, or *blocked / skipped / didn
 
 **Lighthouse (mobile):** Accessibility **100**, Best Practices **100**, SEO **100** on the main screen, and Accessibility 100 on the dev-only state gallery (`localhost:5173/?gallery`, every screen with sample data) in both light and dark. Before this pass the gallery scored 96: fading waiting/skipped steps with opacity had dropped their text below 4.5:1.
 
+### Security in production (verified live, 14 Nov 2026)
+
+| Layer | What it does | Verified |
+|---|---|---|
+| **App Check, enforced** on Firebase AI Logic and Cloud Firestore | Only the genuine PillCheck web app (reCAPTCHA Enterprise score-based attestation) can call Gemini or touch the database. AI Logic calls use **limited-use tokens** (replay protection) | Gemini request with **no** token → `401 UNAUTHENTICATED: Firebase App Check token is invalid`; with a **forged** token → the same `401`. The live app, with its real token, still reads and writes Firestore |
+| **Content Security Policy** (`firebase.json`) | `connect-src` lists every server the page may contact: Firebase + openFDA. **The browser refuses everything else**, even from a compromised dependency | From the live page: `api.fda.gov` → 200; `example.com` and another Google API → *"Refused to connect… violates the document's Content Security Policy"*. [`tests/security.test.ts`](tests/security.test.ts) pins the list |
+| **Permissions-Policy** | Microphone for this site only; camera, location, payment, USB off | Live headers checked |
+| **No debug token in production** | App Check debug settings live in `.env.development.local`, which production builds never read | A whole-object `import.meta.env` default had been inlining every `VITE_*` value, the debug token included, into the bundle. **Caught on Day 12 before any deploy**, fixed, and guarded by a test that fails on the old code |
+| Firestore rules | Own UID only, append-only, schema-checked (Day 7) | 12 emulator tests |
+| `Referrer-Policy: no-referrer`, `nosniff`, HSTS, `frame-ancestors 'none'` | Standard hardening | Live headers checked |
+
+**Deploy:** `npm run deploy:hosting` (build + `firebase deploy --only hosting`).
+
 ### The pipeline in one file
 
 [`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
@@ -262,7 +275,7 @@ flowchart LR
    ```
 4. **App Check debug token:** open http://localhost:5173, copy the debug token printed in the browser console, and add it under App Check → Apps → ⋮ → *Manage debug tokens*. Reload.
 
-   *Tip:* set `VITE_APPCHECK_DEBUG_TOKEN` in `.env.local` to a fixed UUID (`uuidgen`) and register that value once; then every local browser shares it.
+   *Tip:* put `VITE_APPCHECK_DEBUG=true` and `VITE_APPCHECK_DEBUG_TOKEN=<uuidgen output>` in **`.env.development.local`** (never `.env.local`: production builds read that file) and register the UUID once; then every local browser shares it.
 5. **One-time on-device setup:** if speech recognition or Gemini Nano isn't downloaded yet, PillCheck shows **Set up PillCheck**. Click it once; it installs the US-English speech pack and downloads Gemini Nano, with progress.
 6. **Tests:** `npm test` (unit tests for the guard plus the SDK fall-through evidence test).
 
