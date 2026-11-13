@@ -1,0 +1,110 @@
+# PillCheck
+
+**Press one big button, say the name of a pill, hear a calm answer.**
+PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
+
+> Status: **Day 1 of 17**, project scaffold (Firebase, App Check, anonymous auth, device readiness check). See [docs/PLAN.md](docs/PLAN.md).
+> Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
+
+---
+
+## Why
+
+Meera is 74, lives alone and takes five medicines. When she isn't sure two pills are safe together, she calls her daughter (who may not answer) or skips the dose. Skipped and mixed-up doses send seniors to the hospital every day.
+
+*Evidence (⚠️ figures pending source verification on Day 15; not yet for publication):*
+- Seniors account for a disproportionate share of medication errors.
+- Home medication errors drive a large number of ER visits each year.
+- Adverse drug events among seniors cause hundreds of thousands of hospitalizations a year.
+- Nonadherent elderly patients have roughly double the inpatient cost of adherent ones.
+
+## How hybrid inference is used: the routing policy
+
+The routing policy is the product. Each step is pinned to one place, on purpose. Nothing falls back to the cloud silently.
+
+| Step | What | Where | Firebase AI Logic mode | Leaves the device? |
+|---|---|---|---|---|
+| 1 | Hear the question | Chrome on-device speech recognition (`processLocally: true`) | n/a (browser API) | **No.** Audio and transcript stay local |
+| 2 | Pull out drug names | **Gemini Nano** | `InferenceMode.ONLY_ON_DEVICE` | **No** |
+| (guard) | Leak guard scans the outbound payload | Local code | n/a | Blocks anything that isn't a known drug name |
+| 3 | Check interactions, write 1–3 spoken sentences | **Cloud Gemini** | `InferenceMode.ONLY_IN_CLOUD` | Yes: **drug names only** |
+| 4 | Speak the answer | `speechSynthesis` (local voices) | n/a | No |
+| 5 | Audit log | Firestore | n/a | Timestamp, drug names, where each step ran, leak-guard result. No audio, no PII |
+
+### Fail-closed, not fail-open
+If on-device AI isn't available, PillCheck says **"I can't check safely on this device"** and stops.
+
+> **Verified SDK behaviour (firebase@13.3.0 / @firebase/ai@3.1.0):** the SDK only creates its on-device adapter when `globalThis.LanguageModel` exists. If it doesn't, `callCloudOrDevice()` sends the request **to the cloud even in `ONLY_ON_DEVICE` mode**. PillCheck therefore checks for the on-device model *itself*, before any private text reaches the SDK, and also asserts `response.inferenceSource === InferenceSource.ON_DEVICE` (`"on_device"`) afterwards. See [`src/guards/capabilities.ts`](src/guards/capabilities.ts).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Device["🔒 Senior's device (Chrome)"]
+    Mic[Big button + mic] --> STT[Step 1<br/>On-device speech]
+    STT -->|transcript| Nano[Step 2<br/>Gemini Nano<br/>ONLY_ON_DEVICE]
+    Nano -->|drug names| Guard{Leak guard}
+    Guard -->|blocked| Stop[Visible error<br/>no cloud call]
+    TTS[Step 4<br/>On-device voice]
+  end
+  subgraph Cloud["☁️ Firebase"]
+    Gemini[Step 3<br/>Cloud Gemini<br/>ONLY_IN_CLOUD]
+    FS[(Step 5<br/>Firestore audit log)]
+    AC[App Check]
+  end
+  Guard -->|"['warfarin','ibuprofen']"| AC --> Gemini
+  Gemini -->|1–3 sentences| TTS
+  Gemini -.-> FS
+```
+
+## Before / after
+
+| | Before PillCheck | With PillCheck |
+|---|---|---|
+| When unsure about a pill | Calls family, waits, or skips the dose | Presses one button and asks out loud |
+| Time to an answer | Minutes to hours, or never | Seconds |
+| Skill needed | Reading tiny leaflet print, typing | Speaking |
+| Privacy | n/a | Voice and identity never leave the device; the cloud sees drug names only |
+| If the device can't run AI locally | n/a | Clear refusal, never a silent upload |
+
+## Setup
+
+**Prerequisites:** Node 22+, Chrome desktop 139+ on a machine with a GPU (>4 GB VRAM) or 16 GB RAM, ≥22 GB free disk, a Firebase project.
+
+1. **Chrome:** open `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` → *Enabled* → restart. In DevTools, `await LanguageModel.availability()` should return `available`, `downloadable` or `downloading`.
+2. **Firebase console:**
+   1. Add a **Web app** and copy its config.
+   2. **AI Logic** → Get started → Gemini Developer API.
+   3. **Authentication** → Sign-in method → enable **Anonymous**.
+   4. **App Check** → register the web app with **reCAPTCHA Enterprise** (score-based key, your Hosting domains, *not* localhost).
+3. **Local config:**
+   ```bash
+   cp .env.example .env.local   # then fill in the values
+   npm install
+   npm run dev
+   ```
+4. **App Check debug token:** open http://localhost:5173, copy the debug token printed in the browser console, and add it under App Check → Apps → ⋮ → *Manage debug tokens*. Reload.
+
+You should see the **System check** panel with Firebase ✓, App Check ✓, Anonymous sign-in ✓ and the on-device capability rows.
+
+## Demo script (draft, finalised on Day 15)
+
+1. Meera presses **Check my medicine**: "Can I take ibuprofen?" → spoken answer naming her blood thinner. The provenance strip shows *heard on-device → understood on-device → checked in cloud → spoken on-device*.
+2. **Leak guard:** inject "for Meera Sharma, born 3 Dec 1951" → the cloud call is blocked, with a visible error and an audit entry.
+3. **No on-device model:** a Chrome profile without the flag → "I can't check safely on this device." DevTools Network shows zero requests to the model.
+4. **Offline replay:** Wi-Fi off → the last answer replays with the local voice.
+5. **Privacy receipt:** the Firestore audit log shows drug names and inference sources only.
+
+## Repo map
+
+```
+src/firebase/     App, App Check, Auth (AI Logic, Firestore, Remote Config to come)
+src/guards/       on-device capability probe → fail-closed guard (Day 2), leak guard (Day 5)
+src/pipeline/     Steps 1–5 + routing policy as code (Days 3–7)
+docs/             plan, architecture, evidence, demo script
+```
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
+PillCheck is not medical advice and is not a substitute for a pharmacist or doctor.

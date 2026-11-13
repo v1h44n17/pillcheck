@@ -1,0 +1,118 @@
+/*
+ * Age-friendly foundations: 20px base type, AAA-leaning contrast, 64px+ touch
+ * targets, no motion that isn't opted into. Day 10 does the full design pass.
+ */
+:root {
+  --bg: #fbfaf6;
+  --surface: #ffffff;
+  --ink: #111614;
+  --ink-soft: #3d4642;
+  --brand: #0b3d2e;
+  --brand-ink: #ffffff;
+  --ok: #0f6b3a;
+  --warn: #8a5a00;
+  --fail: #a3191b;
+  --line: #d9dcd6;
+  --focus: #1d4ed8;
+  --radius: 20px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1110;
+    --surface: #161c1a;
+    --ink: #f3f5f2;
+    --ink-soft: #c3cbc6;
+    --brand: #7fd1ad;
+    --brand-ink: #062118;
+    --ok: #6fd69c;
+    --warn: #f2c25b;
+    --fail: #ff8a8a;
+    --line: #2b3431;
+    --focus: #93b4ff;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 125%; } /* 20px base */
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.brand { display: flex; align-items: center; gap: 0.6rem; }
+.brand-mark {
+  display: grid; place-items: center;
+  width: 2.4rem; height: 2.4rem; border-radius: 12px;
+  background: var(--brand); color: var(--brand-ink); font-weight: 800;
+}
+h1 { font-size: 2rem; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
+
+.lede { font-size: 1.35rem; margin: 0; color: var(--ink); }
+
+.big-button {
+  min-height: 7rem;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 1.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.big-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.big-button:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; }
+
+.hint { margin: -0.5rem 0 0; color: var(--ink-soft); font-size: 1rem; }
+
+.panel {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.check {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  grid-template-areas: "icon label" "icon detail";
+  column-gap: 0.6rem;
+  font-size: 1rem;
+}
+.check-icon {
+  grid-area: icon;
+  display: grid; place-items: center;
+  width: 1.8rem; height: 1.8rem; border-radius: 50%;
+  font-weight: 800; border: 2px solid currentColor;
+}
+.check-label { grid-area: label; font-weight: 700; }
+.check-detail { grid-area: detail; color: var(--ink-soft); overflow-wrap: anywhere; }
+.check-ok .check-icon { color: var(--ok); }
+.check-warn .check-icon { color: var(--warn); }
+.check-fail .check-icon { color: var(--fail); }
+.check-pending .check-icon { color: var(--ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

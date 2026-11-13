@@ -1,0 +1,22 @@
+# deps / build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# secrets: NEVER commit real config or debug tokens
+.env
+.env.*
+!.env.example
+.firebaserc
+*.debug-token
+
+# firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
