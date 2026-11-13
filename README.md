@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 9 of 17**: all five steps run through one [pipeline](src/pipeline/orchestrator.ts); Meera's medicine list stays on her device; a **live provenance strip** shows where every step ran; and **Remote Config** tunes models and can pause checks without a new build, but can never weaken privacy. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 10 of 17**: the full pipeline, an on-device medicine list, a live provenance strip, safe Remote Config, and an **age-friendly design pass**: Lighthouse Accessibility 100 on every screen, WCAG AAA (7:1) contrast in both themes, enforced by tests. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -183,6 +183,24 @@ Each step shows *waiting → in progress → done*, or *blocked / skipped / didn
 
 **Verified live:** publishing `checks_paused: true` paused the running app on its next config fetch ("PillCheck is paused for a quick update…"), with no new build. Publishing `false` restored it.
 
+### Designed for Meera (74, reading glasses, distrusts apps)
+
+| Choice | Why |
+|---|---|
+| **Atkinson Hyperlegible**, 20px base, 1.55 line height | Typeface designed by the Braille Institute for low-vision readers. **Bundled with the app**, so no request goes to a font CDN |
+| **WCAG AAA contrast (≥ 7:1)** for every text colour, light and dark | [`tests/contrast.test.ts`](tests/contrast.test.ts) reads the tokens from the stylesheet and fails the build if any pair drops below 7:1. It also bans `opacity` on text |
+| `prefers-contrast: more` → pure black/white, thicker borders | For people who've turned on "Increase contrast" |
+| One 7rem microphone button; busy state says **"Please wait…"** at full contrast | A faded button reads as "broken" |
+| 🔒 *"Your voice stays on this computer. Only medicine names are checked online."* | The trust question is answered before she has to ask it |
+| **Answer first**, then the provenance strip (2×3 tiles on phones) | What she needs comes before how it was done |
+| Answer text in regular weight at 1.55rem; only the verdict is bold | Long bold paragraphs are harder to read |
+| Removing a medicine takes two taps | One stray tap can't drop warfarin from every future check |
+| Technical details in a collapsed **"For family & helpers"** drawer | Her screen stays simple; a helper or judge can open the privacy explanation (from the routing policy) and the System check |
+| Gentle scale-only pulses, removed under `prefers-reduced-motion` | No motion she didn't ask for |
+| Space reserved while the device check runs | No content jumping (Lighthouse CLS fixed) |
+
+**Lighthouse (mobile):** Accessibility **100**, Best Practices **100**, SEO **100** on the main screen, and Accessibility 100 on the dev-only state gallery (`localhost:5173/?gallery`, every screen with sample data) in both light and dark. Before this pass the gallery scored 96: fading waiting/skipped steps with opacity had dropped their text below 4.5:1.
+
 ### The pipeline in one file
 
 [`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
@@ -268,7 +286,8 @@ scripts/          build-lexicon.ts
 src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
 firestore.rules   per-user, append-only, schema-checked audit log
 src/cabinet/      cabinet.ts (on-device medicine list) · addByVoice.ts · useCabinet.ts
-src/ui/           ProvenanceStrip (+ provenance.ts) · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
+src/ui/           ProvenanceStrip (+ provenance.ts) · HelpersDrawer · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
+src/dev/          Gallery.tsx: every screen with sample data (?gallery, dev builds only)
 tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
 docs/             plan, architecture, evidence, demo script
 ```

@@ -1,6 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+// Atkinson Hyperlegible (Braille Institute), designed for low-vision readers.
+// Bundled with the app: no request to a font CDN.
+import "@fontsource/atkinson-hyperlegible/latin-400.css";
+import "@fontsource/atkinson-hyperlegible/latin-700.css";
 import "./styles/global.css";
 
 const root = document.getElementById("root");
@@ -22,8 +26,21 @@ if (import.meta.env.DEV) {
   );
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+const reactRoot = createRoot(root);
+
+// Dev-only state gallery (?gallery): every screen with fixture data. Not in production builds.
+if (import.meta.env.DEV && new URLSearchParams(location.search).has("gallery")) {
+  void import("./dev/Gallery").then(({ Gallery }) =>
+    reactRoot.render(
+      <StrictMode>
+        <Gallery />
+      </StrictMode>,
+    ),
+  );
+} else {
+  reactRoot.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}

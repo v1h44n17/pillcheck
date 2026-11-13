@@ -14,7 +14,18 @@ import { speakLocally } from "./pipeline/step4-speak";
 import { ListeningPanel, type CheckState } from "./ui/ListeningPanel";
 import { RefusalScreen } from "./ui/RefusalScreen";
 import { SetupCard, type SetupState } from "./ui/SetupCard";
-import { SystemCheck } from "./ui/SystemCheck";
+import { HelpersDrawer } from "./ui/HelpersDrawer";
+
+function MicIcon() {
+  return (
+    <svg className="big-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4Zm6.5-4a1 1 0 1 1 2 0 8.5 8.5 0 0 1-7.5 8.44V22a1 1 0 1 1-2 0v-2.56A8.5 8.5 0 0 1 3.5 11a1 1 0 1 1 2 0 6.5 6.5 0 0 0 13 0Z"
+      />
+    </svg>
+  );
+}
 
 /**
  * The screen is driven by on-device readiness (src/guards/onDeviceGuard.ts):
@@ -161,6 +172,14 @@ export function App() {
 
   const state = readiness?.overall;
   const provenance = provenanceFor(check, logState);
+  const listening = check.phase === "listening";
+  // Busy = PillCheck is working; the button says "Please wait…" instead of looking broken.
+  const busy =
+    state === undefined ||
+    check.phase === "understanding" ||
+    (check.phase === "understood" && check.checking) ||
+    addState.phase === "listening" ||
+    addState.phase === "understanding";
 
   return (
     <main className="shell">
@@ -172,6 +191,9 @@ export function App() {
       </header>
 
       <p className="lede">Ask out loud if a medicine is safe to take with your other pills.</p>
+      <p className="trust">
+        <span aria-hidden="true">🔒</span> Your voice stays on this computer. Only medicine names are checked online.
+      </p>
 
       {report?.ok && report.config.checksPaused && (
         <p className="paused-banner" role="status">
@@ -184,30 +206,28 @@ export function App() {
       ) : (
         <>
           <button
-            className={`big-button${check.phase === "listening" ? " is-listening" : ""}`}
+            className={`big-button${listening ? " is-listening" : ""}${busy ? " is-busy" : ""}`}
             type="button"
-            disabled={
-              state === undefined ||
-              check.phase === "understanding" ||
-              (check.phase === "understood" && check.checking) ||
-              addState.phase === "listening" ||
-              addState.phase === "understanding"
-            }
-            aria-pressed={check.phase === "listening"}
+            disabled={busy}
+            aria-pressed={listening}
             onClick={onCheckPressed}
           >
-            {check.phase === "listening" ? "I'm done talking" : "Check my medicine"}
+            <MicIcon />
+            <span>{listening ? "I'm done talking" : busy ? "Please wait…" : "Check my medicine"}</span>
           </button>
-          {state === undefined && <p className="hint">Getting ready…</p>}
           {state === "ready" && check.phase === "idle" && (
             <p className="hint">Press the button, then say the name of your medicine.</p>
           )}
         </>
       )}
 
-      {state === "ready" && provenance && <ProvenanceStrip steps={provenance} />}
+      {/* Reserve space while the device check runs, so content doesn't jump (layout shift). */}
+      {state === undefined && <div className="stage-placeholder" aria-hidden="true" />}
 
+      {/* The answer first; where each step ran, right under it. */}
       {state === "ready" && <ListeningPanel state={check} />}
+
+      {state === "ready" && provenance && <ProvenanceStrip steps={provenance} />}
 
       {state === "ready" && (
         <CabinetCard
@@ -225,7 +245,7 @@ export function App() {
 
       {state === "unsupported" && readiness && <RefusalScreen readiness={readiness} />}
 
-      <SystemCheck report={report} readiness={readiness} voices={voices} />
+      <HelpersDrawer report={report} readiness={readiness} voices={voices} />
     </main>
   );
 }

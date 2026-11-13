@@ -3,7 +3,7 @@ import type { CapabilityReport, Readiness } from "../guards/onDeviceGuard";
 
 type RowState = "ok" | "warn" | "fail" | "pending";
 
-/** Technical status panel (for helpers and judges). Day 10 tucks it away for Meera. */
+/** Technical status panel (for helpers and judges), shown inside the "For family & helpers" drawer. */
 export function SystemCheck({
   report,
   readiness,
@@ -14,8 +14,8 @@ export function SystemCheck({
   voices: number | null;
 }) {
   return (
-    <details className="panel" open>
-      <summary>System check</summary>
+    <section className="helpers-section" aria-labelledby="syscheck-title">
+      <h2 id="syscheck-title">System check</h2>
       <ul className="checks">
         <BootRows report={report} />
         <CapRow label="Gemini Nano (on-device AI)" r={readiness?.nano} />
@@ -26,7 +26,7 @@ export function SystemCheck({
           detail={voices == null ? "Checking…" : `${voices} available`}
         />
       </ul>
-    </details>
+    </section>
   );
 }
 

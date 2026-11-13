@@ -57,10 +57,9 @@ export function ListeningPanel({ state }: { state: CheckState }) {
   if (state.phase === "answered") {
     return (
       <>
-        <section className="listen" aria-label="Your question">
-          <p className="listen-label">You asked:</p>
-          <p className="listen-words">“{state.text}”</p>
-        </section>
+        <p className="asked-line">
+          You asked: <strong>“{state.text}”</strong>
+        </p>
         <AnswerCard answer={state.answer} />
       </>
     );

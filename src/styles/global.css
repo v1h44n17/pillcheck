@@ -1,6 +1,11 @@
 /*
- * Age-friendly foundations: 20px base type, AAA-leaning contrast, 64px+ touch
- * targets, no motion that isn't opted into. Day 10 does the full design pass.
+ * Age-friendly design system.
+ *  - Type: Atkinson Hyperlegible (low-vision typeface), 20px base, 1.55 leading.
+ *  - Contrast: every text/background pair is at least 7:1 (WCAG AAA), checked by
+ *    tests/contrast.test.ts for BOTH themes. Never fade text with opacity.
+ *  - Targets: primary 7rem tall, secondary ≥ 3.5rem, all ≥ 48px.
+ *  - Motion: only gentle pulses, all removed under prefers-reduced-motion.
+ *  - prefers-contrast: more → pure black/white and thicker borders.
  */
 :root {
   --bg: #fbfaf6;
@@ -9,11 +14,11 @@
   --ink-soft: #3d4642;
   --brand: #0b3d2e;
   --brand-ink: #ffffff;
-  --ok: #0f6b3a;
-  --warn: #8a5a00;
+  --ok: #0b5a30;
+  --warn: #6b4500;
   --fail: #a3191b;
   --line: #d9dcd6;
-  --focus: #1d4ed8;
+  --focus: #1b45c4;
   --radius: 20px;
   color-scheme: light;
 }
@@ -43,9 +48,41 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
+  font-family: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; }
+
+/* High-contrast preference: pure ink on paper, heavier borders. */
+@media (prefers-contrast: more) {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --ink: #000000;
+    --ink-soft: #1a1a1a;
+    --line: #000000;
+  }
+  .panel, .listen, .cabinet, .answer, .prov-step, .cabinet-list li, .helpers { border-width: 3px !important; }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #000000;
+    --ink: #ffffff;
+    --ink-soft: #e6e6e6;
+    --line: #ffffff;
+  }
+}
+
+.stage-placeholder { min-height: 20rem; }
+
+.trust {
+  margin: -0.5rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-soft);
 }
 
 .shell {
@@ -79,8 +116,22 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   font-size: 1.8rem;
   font-weight: 800;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  padding: 0 1.25rem;
+  line-height: 1.2;
 }
-.big-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.big-button-icon { width: 2.4rem; height: 2.4rem; flex: none; }
+/* Busy: still full contrast, clearly "working", never a faded "broken" button. */
+.big-button.is-busy,
+.big-button:disabled {
+  background: var(--surface);
+  color: var(--ink);
+  border: 3px dashed var(--brand);
+  cursor: progress;
+}
 .big-button:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; }
 
 .hint { margin: -0.5rem 0 0; color: var(--ink-soft); font-size: 1rem; }
@@ -171,7 +222,8 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   animation: pulse 1.2s ease-in-out infinite;
   flex: none;
 }
-@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+/* Scale-only pulse: never fades text below its contrast. Disabled under reduced motion. */
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.82); } }
 .listen-label { font-size: 1.1rem; color: var(--ink-soft); }
 .listen-words { font-size: 1.6rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .listen-error { border-color: var(--warn); font-size: 1.25rem; font-weight: 700; }
@@ -207,7 +259,8 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   width: 2.6rem; height: 2.6rem; border-radius: 50%;
   background: var(--tone); color: var(--surface); font-size: 1.5rem;
 }
-.answer-spoken { font-size: 1.5rem; line-height: 1.4; font-weight: 600; }
+/* Regular weight at a large size reads better than a bold paragraph; the verdict above carries the emphasis. */
+.answer-spoken { font-size: 1.55rem; line-height: 1.45; font-weight: 400; }
 .answer-wait { font-size: 1.3rem; padding: 0.6rem 0.9rem; border-radius: 12px; background: color-mix(in srgb, var(--warn) 15%, transparent); }
 .answer .helper p, .answer .helper li { font-size: 1rem; }
 .answer code { overflow-wrap: anywhere; }
@@ -239,9 +292,21 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr)); /* phones: 2 × 3, half the height of a list */
   gap: 0.5rem;
 }
+@media (min-width: 36rem) {
+  .prov { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Phones: status circle ABOVE the label, so labels get the full cell width and never break mid-word. */
+@media (max-width: 35.99rem) {
+  .prov-step { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; padding: 0.55rem 0.5rem; }
+  .prov-text { justify-items: center; }
+  .prov-icon { width: 1.6rem; height: 1.6rem; font-size: 0.85rem; }
+  .prov-where, .prov-note { font-size: 0.85rem; }
+}
+.asked-line { margin: 0; font-size: 1.15rem; color: var(--ink-soft); overflow-wrap: anywhere; }
+.asked-line strong { color: var(--ink); }
 .prov-step {
   display: flex;
   align-items: center;
@@ -265,8 +330,9 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 .prov-where { font-size: 0.9rem; color: var(--ink-soft); }
 .prov-note { font-size: 0.85rem; font-weight: 700; }
 .where-cloud .prov-where { color: var(--focus); }
-.prov-step.is-waiting { opacity: 0.55; }
-.prov-step.is-skipped { opacity: 0.55; border-style: dashed; }
+/* Waiting / skipped: dashed and quiet, but the text keeps full contrast. */
+.prov-step.is-waiting, .prov-step.is-skipped { border-style: dashed; background: transparent; }
+.prov-step.is-waiting .prov-label, .prov-step.is-skipped .prov-label { color: var(--ink-soft); }
 .prov-step.is-active { border-color: var(--brand); }
 .prov-step.is-active .prov-icon { color: var(--brand); animation: pulse 1.2s ease-in-out infinite; }
 .prov-step.is-done .prov-icon { color: var(--ok); }
@@ -319,11 +385,11 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 .remove-button:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
 .add-button { min-height: 4rem; font-size: 1.3rem; }
 .add-button.is-listening { background: var(--ink); color: var(--bg); }
-.add-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.add-button:disabled { border-style: dashed; cursor: progress; }
 .cabinet-result { font-size: 1.2rem; font-weight: 700; }
 
 /* --- Leak guard --- */
-.med-generic { font-weight: 600; font-size: 1.1rem; opacity: 0.9; }
+.med-generic { font-weight: 400; font-size: 1.1rem; }
 .guard-ok { margin: 0; font-size: 1.05rem; color: var(--ink-soft); }
 .guard-ok code { font-size: 1rem; color: var(--ink); overflow-wrap: anywhere; }
 .guard-blocked {
@@ -348,6 +414,36 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
   border-radius: 14px;
   background: var(--brand); color: var(--brand-ink);
 }
+
+/* --- For family & helpers drawer --- */
+.helpers {
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0 1.25rem;
+}
+.helpers > summary {
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.helpers > summary:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; border-radius: 8px; }
+.helpers[open] { padding-bottom: 1.25rem; }
+.helpers-section { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 2px solid var(--line); margin-top: 0.5rem; }
+.helpers-section h2 { font-size: 1.15rem; margin: 0; }
+.helpers-section p { margin: 0; font-size: 1rem; }
+.policy-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; font-size: 1rem; }
+.policy-list li { display: grid; gap: 0.1rem; }
+.policy-list li > span:last-child { color: var(--ink-soft); }
+.policy-where { font-size: 0.9rem; font-weight: 700; color: var(--ink-soft); }
+.policy-where.where-cloud { color: var(--focus); }
+
+/* --- Dev-only state gallery --- */
+.gallery-frame { display: grid; gap: 0.75rem; padding-top: 1.5rem; border-top: 2px dashed var(--line); }
+.gallery-title { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
