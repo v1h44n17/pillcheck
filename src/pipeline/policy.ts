@@ -45,6 +45,14 @@ export const ROUTING_POLICY = {
     onUnavailable: "refuse",
     leavesDevice: "Nothing. The transcript goes in, a list of drug names comes out.",
   },
+  guard: {
+    label: "Privacy check",
+    where: "on-device",
+    engine: "Leak guard: shape + PII detectors + openFDA lexicon allowlist; rebuilds the payload from canonical names",
+    firebaseMode: null,
+    onUnavailable: "refuse",
+    leavesDevice: "Nothing. It decides what Step 3 may send; any finding blocks the cloud call.",
+  },
   check: {
     label: "Checked in the cloud",
     where: "cloud",

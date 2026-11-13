@@ -1,6 +1,5 @@
 import type { LeakGuardResult } from "../guards/leakGuard";
 import { CHECK_ERROR_MESSAGE, type CheckErrorKind } from "../pipeline/messages";
-import { ROUTING_POLICY } from "../pipeline/policy";
 import type { InteractionAnswer } from "../pipeline/step3-check";
 import { AnswerCard } from "./AnswerCard";
 import { GuardResult } from "./GuardResult";
@@ -13,14 +12,6 @@ export type CheckState =
   | { phase: "understood"; text: string; guard: LeakGuardResult; injected: boolean; checking: boolean }
   | { phase: "answered"; text: string; answer: InteractionAnswer }
   | { phase: "error"; kind: CheckErrorKind };
-
-function DeviceChip({ label }: { label: string }) {
-  return (
-    <span className="chip chip-device">
-      <span aria-hidden="true">🔒</span> {label}
-    </span>
-  );
-}
 
 /** What Meera sees while PillCheck listens, thinks, and answers. */
 export function ListeningPanel({ state }: { state: CheckState }) {
@@ -53,10 +44,6 @@ export function ListeningPanel({ state }: { state: CheckState }) {
           <GuardResult guard={state.guard} injected={state.injected} />
         )}
 
-        <p className="chips">
-          <DeviceChip label={ROUTING_POLICY.transcribe.label} />
-          {state.phase === "understood" && <DeviceChip label={ROUTING_POLICY.extract.label} />}
-        </p>
         {state.phase === "understood" && state.checking && (
           <p className="listen-status">
             <span className="listen-dot listen-dot-think" aria-hidden="true" />

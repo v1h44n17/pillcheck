@@ -1,3 +1,4 @@
+import { getConfig } from "../firebase/remoteConfig";
 import { OnDeviceUnavailableError, RoutingViolationError } from "../guards/onDeviceGuard";
 import { CHECK_ERROR_MESSAGE, REFUSAL_SPOKEN, type CheckErrorKind } from "../pipeline/messages";
 import { ListenError, listenOnce, type ListenHandle, type ListenOptions } from "../pipeline/step1-transcribe";
@@ -20,7 +21,7 @@ export interface AddByVoiceDeps {
 }
 
 export const defaultAddDeps: AddByVoiceDeps = {
-  listen: listenOnce,
+  listen: (opts) => listenOnce({ ...opts, maxMs: getConfig().listenMaxMs }),
   extract: (t) => extractMedicines(t),
   speak: speakLocally,
   store: defaultStore,

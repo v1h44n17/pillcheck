@@ -1,3 +1,4 @@
+import { getConfig } from "../firebase/remoteConfig";
 import { OnDeviceUnavailableError, RoutingViolationError } from "../guards/onDeviceGuard";
 import { LeakBlockedError, scanOutbound, type LeakGuardResult, type OutboundRequest } from "../guards/leakGuard";
 import { withDemoInjection } from "./demoInjection";
@@ -39,10 +40,12 @@ export interface PipelineDeps {
   search?: string;
 }
 
+/** Production wiring. Tunables come from Remote Config (validated; see firebase/remoteConfig.ts). */
 export const defaultDeps: PipelineDeps = {
-  listen: listenOnce,
+  listen: (opts) => listenOnce({ ...opts, maxMs: getConfig().listenMaxMs }),
   extract: (t) => extractMedicines(t),
-  check: (r) => checkInteractions(r),
+  check: (r) =>
+    checkInteractions(r, { modelNames: getConfig().checkModels, maxOutputTokens: getConfig().maxOutputTokens }),
   speak: speakLocally,
   audit: writeAudit,
 };
@@ -54,7 +57,9 @@ export type PipelineEvent =
   | { type: "answered"; text: string; answer: InteractionAnswer }
   | { type: "error"; kind: CheckErrorKind }
   | { type: "refused"; routingViolation: boolean }
-  | { type: "idle" };
+  | { type: "idle" }
+  /** Step 5 finished (or failed). Arrives after the run's other events. */
+  | { type: "logged"; ok: boolean };
 
 export interface RunHandle {
   /** "I'm done talking": stop listening, keep what was heard. */
@@ -160,7 +165,10 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
     } finally {
       // ── Step 5: audit (fire-and-forget; never blocks the answer) ─────────
       if (outcome) {
-        void deps.audit({ outcome, extractSource, leakGuard, answer: answerInfo, spoken, demo });
+        void deps
+          .audit({ outcome, extractSource, leakGuard, answer: answerInfo, spoken, demo })
+          .then((id) => onEvent({ type: "logged", ok: Boolean(id) }))
+          .catch(() => onEvent({ type: "logged", ok: false }));
       }
     }
   })();

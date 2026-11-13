@@ -5,6 +5,9 @@ import { cabinet } from "./cabinet/cabinet";
 import { useCabinet } from "./cabinet/useCabinet";
 import { checkReadiness, countLocalVoices, setupOnDevice, type Readiness } from "./guards/onDeviceGuard";
 import { CabinetCard, type AddState } from "./ui/CabinetCard";
+import { provenanceFor, type LogState } from "./ui/provenance";
+import { ProvenanceStrip } from "./ui/ProvenanceStrip";
+import { getConfig } from "./firebase/remoteConfig";
 import { REFUSAL_SPOKEN } from "./pipeline/messages";
 import { defaultDeps, runCheck, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
 import { speakLocally } from "./pipeline/step4-speak";
@@ -25,6 +28,7 @@ export function App() {
   const [voices, setVoices] = useState<number | null>(null);
   const [setup, setSetup] = useState<SetupState>({ phase: "idle" });
   const [check, setCheck] = useState<CheckState>({ phase: "idle" });
+  const [logState, setLogState] = useState<LogState>("none");
   const run = useRef<RunHandle | null>(null);
   const runId = useRef(0);
   const medicines = useCabinet();
@@ -63,6 +67,12 @@ export function App() {
       void speakLocally(REFUSAL_SPOKEN);
       return;
     }
+    // Remote Config kill switch: refuse (out loud), never degrade.
+    const cfg = getConfig();
+    if (cfg.checksPaused) {
+      void speakLocally(cfg.pausedMessage);
+      return;
+    }
 
     // Second press while listening = "I'm done talking".
     if (check.phase === "listening" && run.current) {
@@ -74,6 +84,7 @@ export function App() {
     if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
     run.current?.cancel();
     setAddState({ phase: "idle" });
+    setLogState("none");
 
     // Only the newest run may update the screen (an old cloud answer must not overwrite a new question).
     const id = ++runId.current;
@@ -128,11 +139,16 @@ export function App() {
       case "understanding":
         return setCheck({ phase: "understanding", text: e.text });
       case "guarded":
+        if (!e.guard.ok) setLogState("pending");
         return setCheck({ phase: "understood", text: e.text, guard: e.guard, injected: e.injected, checking: e.checking });
       case "answered":
+        setLogState("pending");
         return setCheck({ phase: "answered", text: e.text, answer: e.answer });
       case "error":
+        if (e.kind === "no-medicine" || e.kind === "not-understood" || e.kind.startsWith("check-")) setLogState("pending");
         return setCheck({ phase: "error", kind: e.kind });
+      case "logged":
+        return setLogState(e.ok ? "ok" : "failed");
       case "idle":
         return setCheck({ phase: "idle" });
       case "refused":
@@ -144,6 +160,7 @@ export function App() {
   }
 
   const state = readiness?.overall;
+  const provenance = provenanceFor(check, logState);
 
   return (
     <main className="shell">
@@ -155,6 +172,12 @@ export function App() {
       </header>
 
       <p className="lede">Ask out loud if a medicine is safe to take with your other pills.</p>
+
+      {report?.ok && report.config.checksPaused && (
+        <p className="paused-banner" role="status">
+          {report.config.pausedMessage}
+        </p>
+      )}
 
       {state === "needs-setup" && readiness ? (
         <SetupCard readiness={readiness} setup={setup} onSetup={runSetup} />
@@ -181,6 +204,8 @@ export function App() {
           )}
         </>
       )}
+
+      {state === "ready" && provenance && <ProvenanceStrip steps={provenance} />}
 
       {state === "ready" && <ListeningPanel state={check} />}
 

@@ -35,7 +35,7 @@ function answerFor(req: OutboundRequest): InteractionAnswer {
 }
 
 function deps(over: Partial<PipelineDeps> = {}) {
-  const audit = vi.fn(async (_i: AuditInput) => undefined);
+  const audit = vi.fn(async (_i: AuditInput): Promise<string | undefined> => "audit-doc-1");
   const speak = vi.fn(async (_t: string) => true);
   const check = vi.fn(async (req: OutboundRequest) => answerFor(req));
   const extract = vi.fn(async (_t: string) => ({ medicines: ["advil"], where: "on-device" as const, inferenceSource: "on_device" as const }));
@@ -44,19 +44,23 @@ function deps(over: Partial<PipelineDeps> = {}) {
 }
 
 async function run(d: PipelineDeps) {
-  const events: PipelineEvent[] = [];
-  const outcome = await runCheck(d, (e) => events.push(e)).done;
-  await Promise.resolve(); // let the fire-and-forget audit call land
-  return { outcome, events, types: events.map((e) => e.type) };
+  const all: PipelineEvent[] = [];
+  const outcome = await runCheck(d, (e) => all.push(e)).done;
+  await new Promise((r) => setTimeout(r, 0)); // let the fire-and-forget audit call land
+  // "logged" arrives after the run (Step 5 is fire-and-forget); keep it separate.
+  const events = all.filter((e) => e.type !== "logged");
+  const logged = all.find((e) => e.type === "logged");
+  return { outcome, events, logged, types: events.map((e) => e.type) };
 }
 
 describe("orchestrator: the happy path", () => {
   it("runs all five steps in order and audits only what was sent", async () => {
     const { d, audit, speak, check, extract } = deps({ cabinet: () => ["coumadin"] });
-    const { outcome, types } = await run(d);
+    const { outcome, types, logged } = await run(d);
 
     expect(outcome).toBe("answered");
     expect(types).toEqual(["listening", "understanding", "guarded", "answered"]);
+    expect(logged).toEqual({ type: "logged", ok: true });
     expect(extract).toHaveBeenCalledWith(TRANSCRIPT); // the transcript only goes to on-device Step 2
     expect(check).toHaveBeenCalledWith({ medicines: ["advil"], cabinet: ["coumadin"] });
     expect(speak).toHaveBeenCalledWith("Please don't take Advil with your warfarin.");
@@ -143,9 +147,16 @@ describe("orchestrator: refusals and failures", () => {
     spy.mockRestore();
   });
 
+  it("a failed audit write is reported, not hidden", async () => {
+    const { d } = deps({ audit: vi.fn(async () => undefined) });
+    expect((await run(d)).logged).toEqual({ type: "logged", ok: false });
+  });
+
   it("silence or cancel → nothing audited", async () => {
     const silent = deps({ listen: listenWith(new ListenError("no-speech")) });
-    expect((await run(silent.d)).outcome).toBeUndefined();
+    const s = await run(silent.d);
+    expect(s.outcome).toBeUndefined();
+    expect(s.logged).toBeUndefined();
     expect(silent.audit).not.toHaveBeenCalled();
 
     const cancelled = deps({ listen: listenWith(new ListenError("aborted")) });

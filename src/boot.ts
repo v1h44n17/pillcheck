@@ -2,6 +2,7 @@ import { readFirebaseConfig } from "./firebase/config";
 import { getFirebaseApp } from "./firebase/app";
 import { startAppCheck, verifyAppCheck, type AppCheckMode } from "./firebase/appCheck";
 import { signInQuietly } from "./firebase/auth";
+import { loadPillcheckConfig, type PillcheckConfig } from "./firebase/remoteConfig";
 
 /**
  * Boot order matters:
@@ -12,7 +13,7 @@ import { signInQuietly } from "./firebase/auth";
 export type BootReport =
   | { ok: false; stage: "config"; missing: string[] }
   | { ok: false; stage: "appcheck" | "auth"; error: string; appCheckMode?: AppCheckMode }
-  | { ok: true; uid: string; appCheckMode: AppCheckMode; projectId: string };
+  | { ok: true; uid: string; appCheckMode: AppCheckMode; projectId: string; config: PillcheckConfig };
 
 export async function boot(): Promise<BootReport> {
   const cfg = readFirebaseConfig();
@@ -37,7 +38,9 @@ export async function boot(): Promise<BootReport> {
 
   try {
     const user = await signInQuietly(app);
-    return { ok: true, uid: user.uid, appCheckMode, projectId: cfg.options.projectId ?? "?" };
+    // 5. Remote Config (never throws; falls back to safe built-in defaults).
+    const config = await loadPillcheckConfig();
+    return { ok: true, uid: user.uid, appCheckMode, projectId: cfg.options.projectId ?? "?", config };
   } catch (e) {
     return { ok: false, stage: "auth", error: message(e), appCheckMode };
   }

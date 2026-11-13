@@ -1,5 +1,4 @@
 import type { InteractionAnswer, Verdict } from "../pipeline/step3-check";
-import { ROUTING_POLICY } from "../pipeline/policy";
 import { speakLocally } from "../pipeline/step4-speak";
 
 const VERDICT_UI: Record<Verdict, { icon: string; title: string; tone: string }> = {
@@ -8,14 +7,6 @@ const VERDICT_UI: Record<Verdict, { icon: string; title: string; tone: string }>
   avoid: { icon: "✕", title: "Check with your pharmacist first", tone: "avoid" },
   unsure: { icon: "?", title: "I'm not sure", tone: "unsure" },
 };
-
-function Chip({ cloud, label }: { cloud?: boolean; label: string }) {
-  return (
-    <span className={`chip ${cloud ? "chip-cloud" : "chip-device"}`}>
-      <span aria-hidden="true">{cloud ? "☁️" : "🔒"}</span> {label}
-    </span>
-  );
-}
 
 /** The answer Meera hears, plus the "how did we get here" receipt for helpers and judges. */
 export function AnswerCard({ answer }: { answer: InteractionAnswer }) {
@@ -38,13 +29,6 @@ export function AnswerCard({ answer }: { answer: InteractionAnswer }) {
       <button className="secondary-button" type="button" onClick={() => void speakLocally(answer.spoken)}>
         <span aria-hidden="true">🔊</span> Hear it again
       </button>
-
-      <p className="chips">
-        <Chip label={ROUTING_POLICY.transcribe.label} />
-        <Chip label={ROUTING_POLICY.extract.label} />
-        <Chip cloud label={ROUTING_POLICY.check.label} />
-        <Chip label={ROUTING_POLICY.speak.label} />
-      </p>
 
       <details className="helper">
         <summary>Why, and what was sent</summary>

@@ -77,6 +77,15 @@ function BootRows({ report }: { report: BootReport | null }) {
       <Row label="Firebase" state="ok" detail={`Project ${report.projectId}`} />
       <Row label="App Check" state="ok" detail={`Token ✓ (${modeLabel(report.appCheckMode)})`} />
       <Row label="Anonymous sign-in" state="ok" detail={`UID ${report.uid.slice(0, 8)}…`} />
+      <Row
+        label="Remote Config"
+        state={report.config.checksPaused ? "warn" : report.config.source === "defaults" ? "warn" : "ok"}
+        detail={
+          `${report.config.source === "defaults" ? "Built-in defaults" : `Loaded (${report.config.source})`} · ` +
+          `cloud models: ${report.config.checkModels.join(" → ")}` +
+          (report.config.checksPaused ? " · CHECKS PAUSED" : "")
+        }
+      />
     </>
   );
 }

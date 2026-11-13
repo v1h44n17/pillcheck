@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 8 of 17**: all five steps run through one [pipeline](src/pipeline/orchestrator.ts), and Meera has **her own medicine list** (added by voice, kept on her device), so "Can I take Advil?" is checked against everything she already takes. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 9 of 17**: all five steps run through one [pipeline](src/pipeline/orchestrator.ts); Meera's medicine list stays on her device; a **live provenance strip** shows where every step ran; and **Remote Config** tunes models and can pause checks without a new build, but can never weaken privacy. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -158,6 +158,31 @@ Meera (or a family member, once) presses **＋ Add a medicine** and says *"I tak
 - **Leaves the device only inside a check**, as canonical ingredient names after the leak guard. Gemini sees `warfarin`, and Meera still hears *"Please don't take Advil with your **Coumadin**…"* (live result), because her names are put back on-device.
 - **Removing takes two taps** ("Remove" → "Tap again to remove"), so one stray tap can't silently take warfarin off the list every check depends on.
 
+### Where did each step run? The provenance strip
+
+Every check shows a live strip of six steps, each labelled with **where it runs**, from the [routing policy](src/pipeline/policy.ts):
+
+| Heard | Understood | Privacy check | Checked | Spoken | Logged |
+|---|---|---|---|---|---|
+| 🔒 This device | 🔒 This device | 🔒 This device | ☁️ Cloud | 🔒 This device | ☁️ Cloud |
+
+Each step shows *waiting → in progress → done*, or *blocked / skipped / didn't work*. In the leak-guard demo it shows **Privacy check: Stopped** and **Checked: Nothing sent**. "Logged" reflects the real Firestore write result. ([`provenance.ts`](src/ui/provenance.ts) is a pure, tested mapping.)
+
+### Remote Config: tune it, never weaken it
+
+[`remoteConfig.ts`](src/firebase/remoteConfig.ts) and [`remoteconfig.template.json`](remoteconfig.template.json) (`npx firebase deploy --only remoteconfig`):
+
+| Key | Effect | Safety limit |
+|---|---|---|
+| `step3_cloud_models` | Cloud Gemini models for Step 3, tried in order | All entries must be `gemini-*`, up to 4; one bad entry and the defaults are used |
+| `step3_max_output_tokens` | Answer length budget | Clamped to 256–2048 |
+| `listen_max_ms` | Longest the mic stays open | Clamped to 5–30 s |
+| `checks_paused` / `checks_paused_message` | **Kill switch**: checks refuse with a spoken message | Plain text, max 200 characters |
+
+**By design, no key can move a step between device and cloud, disable a guard, or widen what is sent.** The inference modes are hard-coded, and a test pins the key list. The worst a bad config can do is pause PillCheck, which makes it refuse; it can't make it leak.
+
+**Verified live:** publishing `checks_paused: true` paused the running app on its next config fetch ("PillCheck is paused for a quick update…"), with no new build. Publishing `false` restored it.
+
 ### The pipeline in one file
 
 [`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
@@ -236,14 +261,14 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 ## Repo map
 
 ```
-src/firebase/     App, App Check, Auth, AI Logic instance (Firestore, Remote Config to come)
+src/firebase/     App, App Check, Auth, AI Logic, Firestore, Remote Config (validated)
 src/guards/       onDeviceGuard.ts (fail-closed) · leakGuard.ts (what may leave the device)
 src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts
 scripts/          build-lexicon.ts
 src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
 firestore.rules   per-user, append-only, schema-checked audit log
 src/cabinet/      cabinet.ts (on-device medicine list) · addByVoice.ts · useCabinet.ts
-src/ui/           RefusalScreen, SetupCard, ListeningPanel, GuardResult, AnswerCard, CabinetCard, SystemCheck
+src/ui/           ProvenanceStrip (+ provenance.ts) · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
 tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
 docs/             plan, architecture, evidence, demo script
 ```

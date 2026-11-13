@@ -7,6 +7,7 @@ import {
   type HybridParams,
 } from "firebase/ai";
 import { getPillcheckAI } from "../firebase/ai";
+import { DEFAULT_CHECK_MODELS } from "../firebase/remoteConfig";
 import { assertSafeToSend, type OutboundRequest, type SanitisedPayload } from "../guards/leakGuard";
 import type { MedicineMatch } from "../data/lexicon";
 import { fetchLabelExcerpts, type LabelExcerpt } from "./labelGrounding";
@@ -35,10 +36,11 @@ import { ROUTING_POLICY } from "./policy";
  * Cloud models tried in order (all ONLY_IN_CLOUD, all receive the same
  * sanitised payload). Measured live on 14 Nov 2026: gemini-3.5-flash-lite
  * answered correctly in ~6 s; gemini-3.8-flash was returning 500 "high demand".
- * Day 9 moves this list to Remote Config (`step3_cloud_models`).
+ * Remote Config (`step3_cloud_models`) can change the list, not the mode.
  */
-export const DEFAULT_CHECK_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"] as const;
-export const DEFAULT_CHECK_MODEL = DEFAULT_CHECK_MODELS[0];
+export { DEFAULT_CHECK_MODELS };
+export const DEFAULT_CHECK_MODEL = DEFAULT_CHECK_MODELS[0]!;
+const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 
 const VERDICTS = ["ok", "caution", "avoid", "unsure"] as const;
 export type Verdict = (typeof VERDICTS)[number];
@@ -78,8 +80,9 @@ export const CHECK_RESPONSE_SCHEMA = Schema.object({
   optionalProperties: ["waitHours", "interactions"],
 });
 
-export function checkParams(model: string = DEFAULT_CHECK_MODEL): HybridParams {
+export function checkParams(model: string = DEFAULT_CHECK_MODEL, maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS): HybridParams {
   return {
+    // Hard-coded: no config value can move Step 3 (or any step) elsewhere.
     mode: InferenceMode.ONLY_IN_CLOUD,
     inCloudParams: {
       model,
@@ -88,7 +91,7 @@ export function checkParams(model: string = DEFAULT_CHECK_MODEL): HybridParams {
         responseMimeType: "application/json",
         responseSchema: CHECK_RESPONSE_SCHEMA,
         temperature: 0.2,
-        maxOutputTokens: 1024,
+        maxOutputTokens,
       },
     },
   };
@@ -204,8 +207,9 @@ type CheckModel = Pick<GenerativeModel, "generateContent">;
 export interface CheckOptions {
   /** Inject models (tests). Tried in order. */
   models?: Array<{ name: string; model: CheckModel }>;
-  /** Cloud model names to try in order (default DEFAULT_CHECK_MODELS). */
+  /** Cloud model names to try in order (default DEFAULT_CHECK_MODELS; Remote Config can override). */
   modelNames?: readonly string[];
+  maxOutputTokens?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -217,7 +221,7 @@ export async function checkInteractions(request: OutboundRequest, opts: CheckOpt
     opts.models ??
     (opts.modelNames ?? DEFAULT_CHECK_MODELS).map((name) => ({
       name,
-      model: getGenerativeModel(getPillcheckAI(), checkParams(name)) as CheckModel,
+      model: getGenerativeModel(getPillcheckAI(), checkParams(name, opts.maxOutputTokens)) as CheckModel,
     }));
 
   // 2. Grounding: FDA label excerpts for the sanitised names only (fetched once).
