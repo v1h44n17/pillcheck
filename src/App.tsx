@@ -1,36 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { boot, type BootReport } from "./boot";
-import {
-  checkReadiness,
-  countLocalVoices,
-  OnDeviceUnavailableError,
-  RoutingViolationError,
-  setupOnDevice,
-  type Readiness,
-} from "./guards/onDeviceGuard";
-import { scanOutbound } from "./guards/leakGuard";
-import { withDemoInjection } from "./pipeline/demoInjection";
-import { ListenError, listenOnce, type ListenHandle } from "./pipeline/step1-transcribe";
-import { blockedSpokenMessage } from "./ui/GuardResult";
-import { ExtractionError, extractMedicines } from "./pipeline/step2-extract";
-import { CheckAnswerError, CheckUnavailableError, checkInteractions } from "./pipeline/step3-check";
+import { checkReadiness, countLocalVoices, setupOnDevice, type Readiness } from "./guards/onDeviceGuard";
+import { REFUSAL_SPOKEN } from "./pipeline/messages";
+import { defaultDeps, runCheck, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
 import { speakLocally } from "./pipeline/step4-speak";
-import {
-  CHECK_ERROR_MESSAGE,
-  ListeningPanel,
-  type CheckErrorKind,
-  type CheckState,
-} from "./ui/ListeningPanel";
-import { REFUSAL_SPOKEN, RefusalScreen } from "./ui/RefusalScreen";
+import { ListeningPanel, type CheckState } from "./ui/ListeningPanel";
+import { RefusalScreen } from "./ui/RefusalScreen";
 import { SetupCard, type SetupState } from "./ui/SetupCard";
 import { SystemCheck } from "./ui/SystemCheck";
 
-/** Step 2 understood the question but found no medicine name in it. */
-class NoMedicineHeard extends Error {}
-
 /**
  * The screen is driven by on-device readiness (src/guards/onDeviceGuard.ts):
- *   ready        → "Check my medicine" (listening arrives on Day 3)
+ *   ready        → "Check my medicine" runs the pipeline (src/pipeline/orchestrator.ts)
  *   needs-setup  → one-time download of speech + Gemini Nano
  *   unsupported  → loud refusal. The button still works, but only to SAY the refusal.
  */
@@ -40,7 +21,8 @@ export function App() {
   const [voices, setVoices] = useState<number | null>(null);
   const [setup, setSetup] = useState<SetupState>({ phase: "idle" });
   const [check, setCheck] = useState<CheckState>({ phase: "idle" });
-  const listening = useRef<ListenHandle | null>(null);
+  const run = useRef<RunHandle | null>(null);
+  const runId = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -76,78 +58,47 @@ export function App() {
     }
 
     // Second press while listening = "I'm done talking".
-    if (listening.current) {
-      listening.current.stop();
+    if (check.phase === "listening" && run.current) {
+      run.current.stop();
       return;
     }
 
-    // Never let the microphone hear PillCheck's own voice.
+    // Never let the microphone hear PillCheck's own voice (e.g. a previous answer).
     if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
+    run.current?.cancel();
 
-    setCheck({ phase: "listening", interim: "" });
-    const handle = listenOnce({ onInterim: (interim) => setCheck({ phase: "listening", interim }) });
-    listening.current = handle;
+    // Only the newest run may update the screen (an old cloud answer must not overwrite a new question).
+    const id = ++runId.current;
+    const handle = runCheck(defaultDeps, (e) => {
+      if (id === runId.current) onPipelineEvent(e);
+    });
+    run.current = handle;
+    void handle.done.finally(() => {
+      if (run.current === handle) run.current = null;
+    });
+  }
 
-    handle.result
-      .then(async (heard) => {
-        listening.current = null;
-        // Step 2: on-device understanding. The transcript never leaves this tab.
-        setCheck({ phase: "understanding", text: heard.text });
-        const extracted = await extractMedicines(heard.text);
-        if (extracted.medicines.length === 0) throw new NoMedicineHeard();
-
-        // Leak guard: decides what (if anything) may go to the cloud in Step 3.
-        // ?simulate=inject-pii adds a fictional name + birthday here to demo a block.
-        const { medicines, injected } = withDemoInjection(extracted.medicines);
-        const guard = scanOutbound({ medicines });
-        setCheck({ phase: "understood", text: heard.text, guard, injected, checking: guard.ok });
-        if (!guard.ok) {
-          void speakLocally(blockedSpokenMessage(guard.findings));
-          return;
-        }
-
-        // Step 3: the only cloud step. checkInteractions() re-runs the leak guard itself
-        // immediately before the network, then sends canonical ingredient names only.
-        const answer = await checkInteractions({ medicines });
-        setCheck({ phase: "answered", text: heard.text, answer });
-        // Step 4: speak it with a local voice.
-        void speakLocally(answer.spoken);
-      })
-      .catch(async (e: unknown) => {
-        if (e instanceof OnDeviceUnavailableError || e instanceof RoutingViolationError) {
-          // Privacy problem: re-check and show the refusal; never retry in the cloud.
-          if (e instanceof RoutingViolationError) {
-            // Never log the transcript, only what went wrong.
-            console.error("PillCheck routing violation:", e.message);
-          }
-          setCheck({ phase: "idle" });
-          const r = await checkReadiness();
-          setReadiness(e instanceof RoutingViolationError ? { ...r, overall: "unsupported" } : r);
-          void speakLocally(REFUSAL_SPOKEN);
-          return;
-        }
-        const kind: CheckErrorKind =
-          e instanceof ListenError
-            ? e.kind
-            : e instanceof NoMedicineHeard
-              ? "no-medicine"
-              : e instanceof ExtractionError
-                ? "not-understood"
-                : e instanceof CheckUnavailableError
-                  ? "check-unavailable"
-                  : e instanceof CheckAnswerError
-                    ? "check-failed"
-                    : "failed";
-        if (e instanceof CheckUnavailableError || e instanceof CheckAnswerError) {
-          console.error("PillCheck Step 3:", e.message); // drug names at most, never the transcript
-        }
-        if (kind === "aborted") return setCheck({ phase: "idle" });
-        setCheck({ phase: "error", kind });
-        void speakLocally(CHECK_ERROR_MESSAGE[kind]);
-      })
-      .finally(() => {
-        listening.current = null;
-      });
+  /** Pipeline events → what's on screen. All speaking is done by the pipeline. */
+  function onPipelineEvent(e: PipelineEvent) {
+    switch (e.type) {
+      case "listening":
+        return setCheck({ phase: "listening", interim: e.interim });
+      case "understanding":
+        return setCheck({ phase: "understanding", text: e.text });
+      case "guarded":
+        return setCheck({ phase: "understood", text: e.text, guard: e.guard, injected: e.injected, checking: e.checking });
+      case "answered":
+        return setCheck({ phase: "answered", text: e.text, answer: e.answer });
+      case "error":
+        return setCheck({ phase: "error", kind: e.kind });
+      case "idle":
+        return setCheck({ phase: "idle" });
+      case "refused":
+        // Show the refusal screen. A routing violation means this device can't be trusted this session.
+        setCheck({ phase: "idle" });
+        void checkReadiness().then((r) => setReadiness(e.routingViolation ? { ...r, overall: "unsupported" } : r));
+        return;
+    }
   }
 
   const state = readiness?.overall;

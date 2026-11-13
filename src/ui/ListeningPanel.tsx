@@ -1,11 +1,9 @@
 import type { LeakGuardResult } from "../guards/leakGuard";
+import { CHECK_ERROR_MESSAGE, type CheckErrorKind } from "../pipeline/messages";
 import { ROUTING_POLICY } from "../pipeline/policy";
-import type { ListenErrorKind } from "../pipeline/step1-transcribe";
 import type { InteractionAnswer } from "../pipeline/step3-check";
 import { AnswerCard } from "./AnswerCard";
 import { GuardResult } from "./GuardResult";
-
-export type CheckErrorKind = ListenErrorKind | "no-medicine" | "not-understood" | "check-unavailable" | "check-failed";
 
 export type CheckState =
   | { phase: "idle" }
@@ -16,19 +14,6 @@ export type CheckState =
   | { phase: "answered"; text: string; answer: InteractionAnswer }
   | { phase: "error"; kind: CheckErrorKind };
 
-/** Short, plain, spoken-style messages. Each one tells Meera what to do next. */
-export const CHECK_ERROR_MESSAGE: Record<CheckErrorKind, string> = {
-  "no-speech": "I didn't hear anything. Press the button and say the name of your medicine.",
-  "mic-denied": "I need to use the microphone. Please allow it, then press the button again.",
-  "no-mic": "I can't find a microphone. Please check it's plugged in, then press the button again.",
-  aborted: "",
-  failed: "Something went wrong while listening. Please press the button and try again.",
-  "no-medicine": "I didn't catch the name of a medicine. Press the button and say the medicine's name.",
-  "not-understood": "Sorry, I didn't understand that. Press the button and try again.",
-  "check-unavailable": "I couldn't check right now. Please try again in a minute, or ask your pharmacist.",
-  "check-failed": "I couldn't get a clear answer. Please ask your pharmacist before taking it.",
-};
-
 function DeviceChip({ label }: { label: string }) {
   return (
     <span className="chip chip-device">
@@ -37,7 +22,7 @@ function DeviceChip({ label }: { label: string }) {
   );
 }
 
-/** What Meera sees while PillCheck listens, thinks, and what it understood. */
+/** What Meera sees while PillCheck listens, thinks, and answers. */
 export function ListeningPanel({ state }: { state: CheckState }) {
   if (state.phase === "idle") return null;
 

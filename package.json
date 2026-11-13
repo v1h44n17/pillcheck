@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "build:lexicon": "node scripts/build-lexicon.ts"
+    "build:lexicon": "node scripts/build-lexicon.ts",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-pillcheck \"vitest run --config vitest.rules.config.ts\"",
+    "deploy:rules": "firebase deploy --only firestore:rules"
   },
   "dependencies": {
     "firebase": "13.3.0",
@@ -19,9 +21,11 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
+    "firebase-tools": "^15.36.0",
     "typescript": "7.0.2",
     "vite": "8.3.8",
     "vitest": "5.1.0"

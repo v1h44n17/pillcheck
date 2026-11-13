@@ -1,5 +1,5 @@
 import type { MedicineMatch } from "../data/lexicon";
-import { PII_KINDS, type Finding, type FindingKind, type LeakGuardResult } from "../guards/leakGuard";
+import { PII_KINDS, type FindingKind, type LeakGuardResult } from "../guards/leakGuard";
 
 const KIND_LABEL: Record<FindingKind, string> = {
   "unexpected-field": "Unexpected extra information",
@@ -21,18 +21,6 @@ const KIND_LABEL: Record<FindingKind, string> = {
 
 function titleCase(s: string): string {
   return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
-}
-
-/** What PillCheck says out loud when the guard blocks. */
-export function blockedSpokenMessage(findings: Finding[]): string {
-  if (findings.some((f) => PII_KINDS.has(f.kind))) {
-    return "I stopped before checking, because something personal was about to be sent. Nothing left this device.";
-  }
-  const unknown = findings.find((f) => f.kind === "unknown-term");
-  if (unknown) {
-    return `I don't know a medicine called ${unknown.value}. Please check the name and try again.`;
-  }
-  return "I stopped before checking, because something about the question didn't look right. Nothing left this device.";
 }
 
 function MatchTag({ m }: { m: MedicineMatch }) {

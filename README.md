@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 6 of 17**: **the full question → answer loop works.** Speak, Gemini Nano extracts the medicine names on-device, the leak guard rebuilds a names-only payload, cloud Gemini checks it against official FDA labels, and the answer is read aloud with a local voice. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 7 of 17**: **all five steps are wired** through one [pipeline](src/pipeline/orchestrator.ts): on-device listening → Gemini Nano → leak guard → cloud Gemini + FDA labels → local voice → a privacy-safe Firestore audit entry. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -124,6 +124,34 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 
 **Try Step 3 without speaking (dev builds):** `await __pillcheck.check(["advil"], ["warfarin"])` in the console at localhost.
 
+### Step 5: an audit log that can't hold private data
+
+Every check writes one entry to `users/{anonymous uid}/audit/{id}` in Cloud Firestore ([`step5-audit.ts`](src/pipeline/step5-audit.ts)), recording **where each step actually ran** and **exactly what left the device**:
+
+```json
+{
+  "outcome": "answered",
+  "route": { "transcribe": "on-device", "extract": "on-device", "check": "cloud", "speak": "on-device" },
+  "inferenceSource": { "extract": "on_device", "check": "in_cloud" },
+  "leakGuard": { "result": "passed", "findings": [] },
+  "sent": { "medicines": ["ibuprofen"], "cabinet": ["warfarin"] },
+  "verdict": "avoid", "model": "gemini-3.5-flash-lite", "grounded": ["ibuprofen", "warfarin"],
+  "demo": { "injectedPii": false, "simulate": [] },
+  "at": "<server time>", "schemaVersion": 1, "appVersion": "0.1.0"
+}
+```
+
+It's private by construction, with three layers:
+1. **Builder:** entries are assembled only from fixed status words, finding *types* and the canonical ingredient names that were actually sent. Never the transcript, never "Advil", never the text the guard caught.
+2. **Client check:** `assertAuditSafe` rejects any string outside that closed vocabulary.
+3. **[Security rules](firestore.rules):** own UID only, **append-only** (no edits or deletes), exact field list, enum values, server timestamp. They also check consistency: a *blocked* entry must show nothing sent, and `extract` can only ever be `on_device`, so the log can't even record Step 2 in the cloud. Rules tests: [`tests/rules/`](tests/rules/firestore.rules.test.ts), **12 cases, all passing on the Firestore emulator**. Run with `npm run test:rules`. It needs Java 21+: `brew install openjdk@21`, then `export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"`. The emulator uses port 8181.
+
+Audit writes are fire-and-forget: a slow or offline Firestore never delays the spoken answer.
+
+### The pipeline in one file
+
+[`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
+
 **Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, and two badges: 🔒 *Heard on this device* and 🔒 *Understood on this device*. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
@@ -166,7 +194,13 @@ flowchart LR
    1. Add a **Web app** and copy its config.
    2. **AI Logic** → Get started → Gemini Developer API.
    3. **Authentication** → Sign-in method → enable **Anonymous**.
-   4. **App Check** → register the web app with **reCAPTCHA Enterprise** (score-based key, your Hosting domains, *not* localhost).
+   4. **Firestore Database** → Create database → production mode. Then deploy the rules:
+      ```bash
+      cp .firebaserc.example .firebaserc   # put your project ID in it
+      npx firebase login
+      npm run deploy:rules
+      ```
+   5. **App Check** → register the web app with **reCAPTCHA Enterprise** (score-based key, your Hosting domains, *not* localhost).
 3. **Local config:**
    ```bash
    cp .env.example .env.local   # then fill in the values
@@ -196,9 +230,10 @@ src/firebase/     App, App Check, Auth, AI Logic instance (Firestore, Remote Con
 src/guards/       onDeviceGuard.ts (fail-closed) · leakGuard.ts (what may leave the device)
 src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts
 scripts/          build-lexicon.ts
-src/pipeline/     policy.ts (routing policy) · step1-transcribe · step2-extract · step3-check · labelGrounding · step4-speak · Step 5 (Day 7)
+src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
+firestore.rules   per-user, append-only, schema-checked audit log
 src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
-tests/            onDeviceGuard · step1-transcribe · step2-extract · step3-check · leakGuard · lexicon · sdkFallthrough (evidence + control)
+tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
 docs/             plan, architecture, evidence, demo script
 ```
 

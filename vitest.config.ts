@@ -21,6 +21,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Rules tests need the Firestore emulator (Java); they run via `npm run test:rules`.
+    exclude: ["tests/rules/**", "node_modules/**"],
     server: { deps: { inline: [/firebase/] } },
   },
 });

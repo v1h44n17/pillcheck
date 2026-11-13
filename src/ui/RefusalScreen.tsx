@@ -1,10 +1,5 @@
 import type { CapabilityReport, Readiness } from "../guards/onDeviceGuard";
 
-/** What PillCheck says, out loud and on screen, when it can't run on-device. */
-export const REFUSAL_SPOKEN =
-  "I can't check safely on this device. I won't send your question anywhere. " +
-  "If you're unsure about a medicine, please call your pharmacist.";
-
 const LABEL: Record<CapabilityReport["capability"], string> = {
   nano: "On-device AI (Gemini Nano)",
   speech: "On-device listening (speech recognition)",

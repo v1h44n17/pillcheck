@@ -1,0 +1,84 @@
+rules_version = '2';
+
+// PillCheck security rules.
+//
+// - Each anonymous user can only touch users/{their uid}/...
+// - The audit log is APPEND-ONLY: create and read; never update or delete.
+// - Every audit entry must match the privacy-safe schema built by
+//   src/pipeline/step5-audit.ts. There is no free-text field anywhere, so a
+//   transcript, a name or a date of birth has nowhere to go.
+// - Everything else is denied.
+//
+// Tested against the emulator by tests/rules/firestore.rules.test.ts.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function auditKeys() {
+      return ['schemaVersion', 'at', 'outcome', 'route', 'inferenceSource', 'leakGuard',
+              'sent', 'verdict', 'model', 'grounded', 'demo', 'appVersion'];
+    }
+
+    function exactKeys(m, keys) {
+      return m is map && m.keys().hasOnly(keys) && m.keys().hasAll(keys);
+    }
+
+    function validAudit(d) {
+      return exactKeys(d, auditKeys())
+        && d.schemaVersion == 1
+        && d.at == request.time
+        && d.outcome in ['answered', 'blocked', 'refused', 'no-medicine', 'not-understood',
+                         'check-unavailable', 'check-failed']
+
+        // Where each step ran. Step 1 is always on-device; Step 2 can only ever be on-device.
+        && exactKeys(d.route, ['transcribe', 'extract', 'check', 'speak'])
+        && d.route.transcribe == 'on-device'
+        && d.route.extract in ['on-device', 'not-run']
+        && d.route.check in ['cloud', 'not-run']
+        && d.route.speak in ['on-device', 'not-run']
+        && exactKeys(d.inferenceSource, ['extract', 'check'])
+        && (d.inferenceSource.extract == null || d.inferenceSource.extract == 'on_device')
+        && (d.inferenceSource.check == null || d.inferenceSource.check == 'in_cloud')
+
+        // Leak guard: result plus finding TYPES only (never the caught text).
+        && exactKeys(d.leakGuard, ['result', 'findings'])
+        && d.leakGuard.result in ['passed', 'blocked', 'not-run']
+        && d.leakGuard.findings is list && d.leakGuard.findings.size() <= 15
+        && d.leakGuard.findings.hasOnly(['unexpected-field', 'not-a-list', 'not-text', 'too-many',
+             'too-long', 'email', 'phone', 'date', 'id-number', 'digits', 'address', 'title',
+             'personal-phrase', 'possible-name', 'unknown-term'])
+
+        // Exactly what was sent to the cloud: canonical ingredient names (checked client-side
+        // against the lexicon), bounded in number.
+        && exactKeys(d.sent, ['medicines', 'cabinet'])
+        && d.sent.medicines is list && d.sent.medicines.size() <= 5
+        && d.sent.cabinet is list && d.sent.cabinet.size() <= 20
+        && d.grounded is list && d.grounded.size() <= 25
+
+        && (d.verdict == null || d.verdict in ['ok', 'caution', 'avoid', 'unsure'])
+        && (d.model == null || (d.model is string && d.model.matches('^gemini-[a-z0-9.-]{1,40}$')))
+        && exactKeys(d.demo, ['injectedPii', 'simulate'])
+        && d.demo.injectedPii is bool
+        && d.demo.simulate is list && d.demo.simulate.hasOnly(['no-nano', 'no-speech', 'inject-pii'])
+        && d.appVersion is string && d.appVersion.size() <= 20
+
+        // Consistency: a blocked check sent nothing; an answered check ran in the cloud.
+        && (d.outcome != 'blocked'
+            || (d.sent.medicines.size() == 0 && d.sent.cabinet.size() == 0 && d.route.check == 'not-run'))
+        && (d.outcome != 'answered' || d.route.check == 'cloud');
+    }
+
+    match /users/{uid}/audit/{entryId} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid) && validAudit(request.resource.data);
+      allow update, delete: if false; // append-only
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
