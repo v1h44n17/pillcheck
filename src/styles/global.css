@@ -441,6 +441,47 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 .policy-where { font-size: 0.9rem; font-weight: 700; color: var(--ink-soft); }
 .policy-where.where-cloud { color: var(--focus); }
 
+/* --- Privacy receipt --- */
+.receipt-summary { font-size: 1.05rem; }
+.receipt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.receipt-list li {
+  display: grid; gap: 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border: 2px solid var(--line); border-radius: 12px;
+  font-size: 1rem;
+}
+.receipt-time { font-size: 0.9rem; color: var(--ink-soft); }
+.receipt-what { font-weight: 700; }
+.receipt-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tag { font-size: 0.85rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px; border: 2px solid var(--line); }
+.tag-cloud { color: var(--focus); border-color: currentColor; }
+.tag-blocked { color: var(--fail); border-color: currentColor; }
+
+/* --- Demo controls (?demo only) --- */
+.demo-panel {
+  border: 3px dashed var(--focus);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.demo-panel h2 { font-size: 1.05rem; margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: var(--focus); }
+.demo-switches { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.demo-switches li { display: grid; gap: 0.2rem; }
+.demo-switch {
+  display: inline-flex; align-items: center; gap: 0.6rem; justify-self: start;
+  min-height: 3rem; padding: 0 1rem 0 0.4rem;
+  border-radius: 12px; border: 2px solid var(--ink); background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+}
+.demo-switch:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+.demo-switch-state { min-width: 3.2rem; text-align: center; padding: 0.2rem 0; border-radius: 8px; border: 2px solid var(--ink-soft); font-size: 0.85rem; }
+.demo-switch.is-on { border-color: var(--focus); }
+.demo-switch.is-on .demo-switch-state { background: var(--focus); color: var(--surface); border-color: var(--focus); }
+.demo-shows { font-size: 0.95rem; color: var(--ink-soft); }
+.demo-net { font-weight: 700; }
+.demo-net.is-offline { color: var(--fail); }
+
 /* --- Dev-only state gallery --- */
 .gallery-frame { display: grid; gap: 0.75rem; padding-top: 1.5rem; border-top: 2px dashed var(--line); }
 .gallery-title { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin: 0; }

@@ -11,9 +11,11 @@ import { getConfig } from "./firebase/remoteConfig";
 import { REFUSAL_SPOKEN } from "./pipeline/messages";
 import { defaultDeps, runCheck, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
 import { speakLocally } from "./pipeline/step4-speak";
+import { activeSimulateFlags, writeAudit } from "./pipeline/step5-audit";
 import { ListeningPanel, type CheckState } from "./ui/ListeningPanel";
 import { RefusalScreen } from "./ui/RefusalScreen";
 import { SetupCard, type SetupState } from "./ui/SetupCard";
+import { DemoPanel } from "./ui/DemoPanel";
 import { HelpersDrawer } from "./ui/HelpersDrawer";
 
 function MicIcon() {
@@ -76,6 +78,13 @@ export function App() {
   function onCheckPressed() {
     if (readiness?.overall === "unsupported") {
       void speakLocally(REFUSAL_SPOKEN);
+      // Record the refusal too, so the privacy receipt shows "Refused: nothing sent".
+      void writeAudit({
+        outcome: "refused",
+        leakGuard: { result: "not-run" },
+        spoken: true,
+        demo: { injectedPii: false, simulate: activeSimulateFlags() },
+      });
       return;
     }
     // Remote Config kill switch: refuse (out loud), never degrade.
@@ -172,6 +181,8 @@ export function App() {
 
   const state = readiness?.overall;
   const provenance = provenanceFor(check, logState);
+  // Presenter controls: only with ?demo in the URL.
+  const showDemoPanel = new URLSearchParams(location.search).has("demo");
   const listening = check.phase === "listening";
   // Busy = PillCheck is working; the button says "Please wait…" instead of looking broken.
   const busy =
@@ -194,6 +205,19 @@ export function App() {
       <p className="trust">
         <span aria-hidden="true">🔒</span> Your voice stays on this computer. Only medicine names are checked online.
       </p>
+
+      {showDemoPanel && (
+        <DemoPanel
+          onFlagsChanged={() => {
+            // Flags changed: re-run the on-device checks (e.g. "no on-device AI" → refusal) and start fresh.
+            run.current?.cancel();
+            if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
+            setCheck({ phase: "idle" });
+            setLogState("none");
+            void checkReadiness().then(setReadiness);
+          }}
+        />
+      )}
 
       {report?.ok && report.config.checksPaused && (
         <p className="paused-banner" role="status">

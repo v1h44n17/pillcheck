@@ -1,6 +1,7 @@
 import type { BootReport } from "../boot";
 import type { Readiness } from "../guards/onDeviceGuard";
 import { ROUTING_POLICY, type StepId } from "../pipeline/policy";
+import { PrivacyReceipt } from "./PrivacyReceipt";
 import { SystemCheck } from "./SystemCheck";
 
 /** The order a check runs in, plus where her list lives. */
@@ -40,6 +41,8 @@ export function HelpersDrawer({
         </ul>
         <p>If this computer can't do the private steps itself, PillCheck refuses instead of using the cloud.</p>
       </section>
+
+      <PrivacyReceipt />
 
       <SystemCheck report={report} readiness={readiness} voices={voices} />
     </details>

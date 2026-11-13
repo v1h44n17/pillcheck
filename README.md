@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 10 of 17**: the full pipeline, an on-device medicine list, a live provenance strip, safe Remote Config, and an **age-friendly design pass**: Lighthouse Accessibility 100 on every screen, WCAG AAA (7:1) contrast in both themes, enforced by tests. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 11 of 17**: the full pipeline, an on-device medicine list, a live provenance strip, safe Remote Config, an age-friendly design (Lighthouse Accessibility 100, AAA contrast), a **privacy receipt** that reads back the user's own audit log, and **demo controls** (`?demo`) for the three demo beats. See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -268,13 +268,21 @@ flowchart LR
 
 You should see the **System check** panel with Firebase ✓, App Check ✓, Anonymous sign-in ✓ and the on-device capability rows.
 
-## Demo script (draft, finalised on Day 15)
+## Demo script (run-through; video timing finalised on Day 15)
 
-1. Meera presses **Check my medicine**: "Can I take ibuprofen?" → spoken answer naming her blood thinner. The provenance strip shows *heard on-device → understood on-device → checked in cloud → spoken on-device*.
-2. **Leak guard:** inject "for Meera Sharma, born 3 Dec 1951" → the cloud call is blocked, with a visible error and an audit entry.
-3. **No on-device model:** a Chrome profile without the flag → "I can't check safely on this device." DevTools Network shows zero requests to the model.
-4. **Offline replay:** Wi-Fi off → the last answer replays with the local voice.
-5. **Privacy receipt:** the Firestore audit log shows drug names and inference sources only.
+Open **`/?demo`**. A dashed **Demo controls** panel appears (only with `?demo`), with switches that edit the same `?simulate=` flags the guards read. Every switch can only make PillCheck *refuse*; none can make it send more.
+
+**Setup (once):** in **My medicines**, press **＋ Add a medicine** → *"I take Coumadin and Lipitor."* Both appear; no network request is made.
+
+| # | Beat | What you do | What the audience sees |
+|---|---|---|---|
+| 1 | **The answer** | Press **Check my medicine** → *"Can I take Advil?"* | Spoken: *"Please don't take Advil with your Coumadin…"*. The strip shows **Heard 🔒 · Understood 🔒 · Privacy check 🔒 · Checked ☁️ · Spoken 🔒 · Logged ☁️**. "Why, and what was sent" shows only `ibuprofen`, `warfarin`, `atorvastatin` |
+| 2 | **Leak guard** | Demo controls → **Add a fake name and birthday: ON**, then ask again | 🛑 **Stopped before sending**: *"What looks like a person's name: 'Meera Sharma'"*, *"A date: '12/03/1951'"*. The strip shows **Privacy check: Stopped · Checked: Nothing sent** |
+| 3 | **Loud refusal** | Switch the fake name **OFF**, then **Pretend there's no on-device AI: ON**, then press the button | *"I can't check safely on this device. I won't send your question anywhere…"*, spoken and on screen |
+| 4 | **Offline voice** | Switch it OFF, ask once more, then turn **Wi-Fi off** | Demo panel: **Network: OFFLINE**. Press **🔊 Hear it again**: the answer is still spoken (local voice) |
+| 5 | **Privacy receipt** | **For family & helpers → Show my privacy log** | *"N checks. The only things that ever left this computer were medicine names: atorvastatin, ibuprofen, warfarin. 1 stopped by the privacy check. 1 refused…"*, with one plain-language line per check, including the blocked and refused ones |
+
+The receipt reads the user's own Firestore log (owner-only by the [security rules](firestore.rules)), so beat 5 shows the real entries written during beats 1–3.
 
 ## Repo map
 
@@ -286,6 +294,8 @@ scripts/          build-lexicon.ts
 src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
 firestore.rules   per-user, append-only, schema-checked audit log
 src/cabinet/      cabinet.ts (on-device medicine list) · addByVoice.ts · useCabinet.ts
+src/receipt/      receipt.ts: reads the user's own audit log back in plain language
+src/demo/         demoFlags.ts: ?simulate switches for the Demo controls panel (?demo)
 src/ui/           ProvenanceStrip (+ provenance.ts) · HelpersDrawer · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
 src/dev/          Gallery.tsx: every screen with sample data (?gallery, dev builds only)
 tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
