@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 4 of 17**, Steps 1–2 work: speak a question, and Gemini Nano pulls out the medicine names on-device. Nothing has left the device yet. See [docs/PLAN.md](docs/PLAN.md).
+> Status: **Day 5 of 17**, Steps 1–2 plus the **leak guard**: speak a question, Gemini Nano pulls out the medicine names on-device, and the leak guard decides exactly what may go to the cloud. Nothing is sent yet (Step 3 is Day 6). See [docs/PLAN.md](docs/PLAN.md).
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
@@ -81,6 +81,25 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 
 **Tests run the browser build of Firebase AI Logic.** Under Node, `firebase/ai` resolves to a build with *no* on-device adapter, where everything goes to the cloud. [`vitest.config.ts`](vitest.config.ts) aliases it to the browser build, and a control test proves that (Nano present → zero network requests).
 
+### The leak guard: what is allowed to leave
+
+[`leakGuard.ts`](src/guards/leakGuard.ts) runs on everything bound for the cloud. **Any finding is a hard block**: nothing is sent, the screen shows why, and PillCheck says so out loud.
+
+| Check | What it catches |
+|---|---|
+| **Shape** | Anything but `{ medicines: string[], cabinet?: string[] }`, e.g. an extra `patientName` field |
+| **Structural PII** (runs on every entry) | emails, ID numbers, dates, phone numbers, addresses, any digits (doses, ages, times) |
+| **Allowlist** | every entry must be a known medicine in the [openFDA lexicon](src/data/drug-lexicon.json) (2,000+ ingredients, thousands of brands, public domain) |
+| **Word PII** (only on unknown entries) | titles (Mrs, Dr), personal phrases ("my name is", "born"); 2–3 unknown words are flagged as a *possible name* |
+| **Rebuild** | the payload is **rebuilt from canonical ingredient names in the lexicon**. "Advil" becomes `ibuprofen`, so Meera's own words are never what's sent |
+
+**The lexicon's own safety rules** ([`scripts/build-lexicon.ts`](scripts/build-lexicon.ts), `npm run build:lexicon`):
+- only brands taken by mouth;
+- a brand is kept **only if every product under that name has the same ingredients**. Store brands like "Equate" or "CVS" sell dozens of different drugs under one name, and mapping them would check the wrong drug;
+- no entry contains a digit or symbol, enforced by a test.
+
+**Demo the block:** open `http://localhost:5173/?simulate=inject-pii`, press the button and say "Can I take ibuprofen?". A fictional name and birthday are added after Nano (simulating a model that leaked them), and you get **🛑 Stopped before sending**: *"What looks like a person's name: 'Meera Sharma'"*, *"A date: '12/03/1951'"*, *Nothing left this device*.
+
 **Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, and two badges: 🔒 *Heard on this device* and 🔒 *Understood on this device*. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
@@ -150,10 +169,12 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 
 ```
 src/firebase/     App, App Check, Auth, AI Logic instance (Firestore, Remote Config to come)
-src/guards/       onDeviceGuard.ts (fail-closed, Day 2) · leak guard (Day 5)
+src/guards/       onDeviceGuard.ts (fail-closed) · leakGuard.ts (what may leave the device)
+src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts
+scripts/          build-lexicon.ts
 src/pipeline/     policy.ts (routing policy) · step1-transcribe · step2-extract · step4-speak · Steps 3, 5 (Days 6–7)
 src/ui/           RefusalScreen, SetupCard, ListeningPanel, SystemCheck
-tests/            onDeviceGuard · step1-transcribe · step2-extract · sdkFallthrough (evidence + control)
+tests/            onDeviceGuard · step1-transcribe · step2-extract · leakGuard · lexicon · sdkFallthrough (evidence + control)
 docs/             plan, architecture, evidence, demo script
 ```
 

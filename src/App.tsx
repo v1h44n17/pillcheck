@@ -8,7 +8,10 @@ import {
   setupOnDevice,
   type Readiness,
 } from "./guards/onDeviceGuard";
+import { scanOutbound } from "./guards/leakGuard";
+import { withDemoInjection } from "./pipeline/demoInjection";
 import { ListenError, listenOnce, type ListenHandle } from "./pipeline/step1-transcribe";
+import { blockedSpokenMessage } from "./ui/GuardResult";
 import { ExtractionError, extractMedicines } from "./pipeline/step2-extract";
 import { speakLocally } from "./pipeline/step4-speak";
 import {
@@ -89,9 +92,15 @@ export function App() {
         listening.current = null;
         // Step 2: on-device understanding. The transcript never leaves this tab.
         setCheck({ phase: "understanding", text: heard.text });
-        const { medicines } = await extractMedicines(heard.text);
-        if (medicines.length === 0) throw new NoMedicineHeard();
-        setCheck({ phase: "understood", text: heard.text, medicines });
+        const extracted = await extractMedicines(heard.text);
+        if (extracted.medicines.length === 0) throw new NoMedicineHeard();
+
+        // Leak guard: decides what (if anything) may go to the cloud in Step 3.
+        // ?simulate=inject-pii adds a fictional name + birthday here to demo a block.
+        const { medicines, injected } = withDemoInjection(extracted.medicines);
+        const guard = scanOutbound({ medicines });
+        setCheck({ phase: "understood", text: heard.text, guard, injected });
+        if (!guard.ok) void speakLocally(blockedSpokenMessage(guard.findings));
       })
       .catch(async (e: unknown) => {
         if (e instanceof OnDeviceUnavailableError || e instanceof RoutingViolationError) {

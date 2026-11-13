@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:lexicon": "node scripts/build-lexicon.ts"
   },
   "dependencies": {
     "firebase": "13.3.0",

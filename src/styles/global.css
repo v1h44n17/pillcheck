@@ -187,6 +187,23 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 .chip-device { color: var(--ok); }
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
 
+/* --- Leak guard --- */
+.med-generic { font-weight: 600; font-size: 1.1rem; opacity: 0.9; }
+.guard-ok { margin: 0; font-size: 1.05rem; color: var(--ink-soft); }
+.guard-ok code { font-size: 1rem; color: var(--ink); overflow-wrap: anywhere; }
+.guard-blocked {
+  border: 3px solid var(--fail);
+  border-radius: 16px;
+  padding: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.guard-blocked p { margin: 0; font-size: 1.1rem; }
+.guard-blocked-title { font-size: 1.4rem !important; font-weight: 800; color: var(--fail); }
+.guard-findings { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.4rem; font-size: 1rem; }
+.guard-findings li strong { display: block; }
+.guard-findings li span { color: var(--ink-soft); overflow-wrap: anywhere; }
+
 /* --- Step 2: understood medicines --- */
 .listen-dot-think { background: var(--brand); }
 .med-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; }

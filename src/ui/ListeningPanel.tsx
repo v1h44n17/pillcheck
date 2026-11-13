@@ -1,5 +1,7 @@
+import type { LeakGuardResult } from "../guards/leakGuard";
 import { ROUTING_POLICY } from "../pipeline/policy";
 import type { ListenErrorKind } from "../pipeline/step1-transcribe";
+import { GuardResult } from "./GuardResult";
 
 export type CheckErrorKind = ListenErrorKind | "no-medicine" | "not-understood";
 
@@ -7,7 +9,7 @@ export type CheckState =
   | { phase: "idle" }
   | { phase: "listening"; interim: string }
   | { phase: "understanding"; text: string }
-  | { phase: "understood"; text: string; medicines: string[] }
+  | { phase: "understood"; text: string; guard: LeakGuardResult; injected: boolean }
   | { phase: "error"; kind: CheckErrorKind };
 
 /** Short, plain, spoken-style messages. Each one tells Meera what to do next. */
@@ -20,10 +22,6 @@ export const CHECK_ERROR_MESSAGE: Record<CheckErrorKind, string> = {
   "no-medicine": "I didn't catch the name of a medicine. Press the button and say the medicine's name.",
   "not-understood": "Sorry, I didn't understand that. Press the button and try again.",
 };
-
-function titleCase(s: string): string {
-  return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
-}
 
 function DeviceChip({ label }: { label: string }) {
   return (
@@ -61,22 +59,15 @@ export function ListeningPanel({ state }: { state: CheckState }) {
             Understanding on this device…
           </p>
         ) : (
-          <>
-            <p className="listen-label">Medicine{state.medicines.length > 1 ? "s" : ""}:</p>
-            <ul className="med-list">
-              {state.medicines.map((m) => (
-                <li key={m}>{titleCase(m)}</li>
-              ))}
-            </ul>
-          </>
+          <GuardResult guard={state.guard} injected={state.injected} />
         )}
 
         <p className="chips">
           <DeviceChip label={ROUTING_POLICY.transcribe.label} />
           {state.phase === "understood" && <DeviceChip label={ROUTING_POLICY.extract.label} />}
         </p>
-        {state.phase === "understood" && (
-          <p className="hint">Next in the build: checking these in the cloud (Days 5–6).</p>
+        {state.phase === "understood" && state.guard.ok && (
+          <p className="hint">Next in the build: checking these in the cloud (Day 6).</p>
         )}
       </section>
     );
