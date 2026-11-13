@@ -27,6 +27,16 @@ export const LEXICON_INFO = {
   brandCount: Object.keys(BRANDS).length,
 };
 
+/**
+ * Names "Did you mean…?" may suggest: curated aliases, plus canonical ingredients
+ * of 8+ letters. Not the ~1,400 openFDA brands, and not short ingredients: too
+ * close to people's names ("Meera" → "Menera", "Cooper" → "copper").
+ * suggest.ts adds the common household medicines on top.
+ */
+export function suggestableNames(): string[] {
+  return [...new Set([...Object.keys(CURATED_ALIASES), ...[...INGREDIENTS].filter((i) => i.length >= 8)])];
+}
+
 export function isCanonicalIngredient(name: string): boolean {
   return INGREDIENTS.has(name);
 }

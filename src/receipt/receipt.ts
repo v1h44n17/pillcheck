@@ -1,7 +1,6 @@
 import { getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { collection, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
-import { getPillcheckDb } from "../firebase/firestore";
+import { loadFirestore } from "../firebase/firestore";
 import { OUTCOMES, type Outcome } from "../pipeline/step5-audit";
 
 /**
@@ -36,7 +35,10 @@ export function parseAuditEntry(id: string, d: Record<string, unknown>): Receipt
   const sent = (d.sent ?? {}) as Record<string, unknown>;
   const guard = (d.leakGuard ?? {}) as Record<string, unknown>;
   const demo = (d.demo ?? {}) as Record<string, unknown>;
-  const at = d.at instanceof Timestamp ? d.at.toDate() : d.at instanceof Date ? d.at : null;
+  // Firestore Timestamp (duck-typed, so this file needn't load Firestore up front) or Date.
+  const raw = d.at as { toDate?: () => unknown } | Date | undefined;
+  const fromTs = raw && !(raw instanceof Date) && typeof raw.toDate === "function" ? raw.toDate() : undefined;
+  const at = fromTs instanceof Date ? fromTs : raw instanceof Date ? raw : null;
   const result = guard.result === "passed" || guard.result === "blocked" ? guard.result : "not-run";
   return {
     id,
@@ -99,7 +101,8 @@ export function describeEntry(e: ReceiptEntry): string {
 export async function fetchMyReceipt(max = 20): Promise<ReceiptEntry[]> {
   const uid = getAuth(getApp()).currentUser?.uid;
   if (!uid) throw new Error("not signed in");
-  const snap = await getDocs(query(collection(getPillcheckDb(), "users", uid, "audit"), orderBy("at", "desc"), limit(max)));
+  const { db, fs } = await loadFirestore();
+  const snap = await fs.getDocs(fs.query(fs.collection(db, "users", uid, "audit"), fs.orderBy("at", "desc"), fs.limit(max)));
   return snap.docs.flatMap((doc) => {
     const e = parseAuditEntry(doc.id, doc.data());
     return e ? [e] : [];

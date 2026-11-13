@@ -98,6 +98,12 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 - a brand is kept **only if every product under that name has the same ingredients**. Store brands like "Equate" or "CVS" sell dozens of different drugs under one name, and mapping them would check the wrong drug;
 - no entry contains a digit or symbol, enforced by a test.
 
+**"Did you mean…?" (a backstop for mishearings).** If the block is *only* about unknown medicine words, and each one is a clear near-miss of a well-known medicine, Meera sees **"Did you mean Coumadin?"** and a big **Yes, check Coumadin** button ([`suggest.ts`](src/data/suggest.ts)).
+- The suggestion is computed **on the device** from the lexicon. Nothing is sent until she presses the button, and the corrected names then go through the leak guard, Step 3 and the audit as usual.
+- It allows at most 1 edit for short names and 2 for long ones, needs the same first letter, and gives no suggestion on a tie.
+- Candidates are curated aliases, common medicines and ingredients of 8+ letters. It never offers when anything personal was found.
+- A test checks that ~30 common first names and surnames (Meera, Patel, Cooper…) are never "corrected" into a medicine.
+
 **Demo the block:** open `http://localhost:5173/?simulate=inject-pii`, press the button and say "Can I take ibuprofen?". A fictional name and birthday are added after Nano (simulating a model that leaked them), and you get **🛑 Stopped before sending**: *"What looks like a person's name: 'Meera Sharma'"*, *"A date: '12/03/1951'"*, *Nothing left this device*.
 
 ### Step 3: the interaction check (cloud Gemini, `ONLY_IN_CLOUD`)
@@ -200,6 +206,7 @@ Each step shows *waiting → in progress → done*, or *blocked / skipped / didn
 | Technical details in a collapsed **"For family & helpers"** drawer | Her screen stays simple; a helper or judge can open the privacy explanation (from the routing policy) and the System check |
 | Gentle scale-only pulses, removed under `prefers-reduced-motion` | No motion she didn't ask for |
 | Space reserved while the device check runs | No content jumping (Lighthouse CLS fixed) |
+| Firestore loads only when it's first needed (audit, receipt) | First-screen JavaScript **311 → 171 KB** gzipped |
 
 **Lighthouse (mobile):** Accessibility **100**, Best Practices **100**, SEO **100** on the main screen, and Accessibility 100 on the dev-only state gallery (`localhost:5173/?gallery`, every screen with sample data) in both light and dark. Before this pass the gallery scored 96: fading waiting/skipped steps with opacity had dropped their text below 4.5:1.
 
@@ -304,7 +311,7 @@ The receipt reads the user's own Firestore log (owner-only by the [security rule
 ```
 src/firebase/     App, App Check, Auth, AI Logic, Firestore, Remote Config (validated)
 src/guards/       onDeviceGuard.ts (fail-closed) · leakGuard.ts (what may leave the device)
-src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts
+src/data/         drug-lexicon.json (openFDA, generated) · aliases.ts (curated) · lexicon.ts · suggest.ts ("Did you mean…?") · biasPhrases.ts
 scripts/          build-lexicon.ts
 src/pipeline/     orchestrator.ts (Steps 1–5) · policy.ts (routing policy) · step1–step5 · labelGrounding · messages
 firestore.rules   per-user, append-only, schema-checked audit log

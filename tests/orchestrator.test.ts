@@ -184,3 +184,50 @@ describe("orchestrator: refusals and failures", () => {
     expect(cancelled.audit).not.toHaveBeenCalled();
   });
 });
+
+describe("orchestrator: \"Did you mean…?\"", () => {
+  const misheard = () =>
+    vi.fn(async (_t: string) => ({ medicines: ["advil", "coumdin"], where: "on-device" as const, inferenceSource: "on_device" as const }));
+
+  it("a near-miss medicine word blocks (nothing sent) and offers a correction out loud", async () => {
+    const { d, check, speak } = deps({ extract: misheard() });
+    const { outcome, events } = await run(d);
+    expect(outcome).toBe("blocked");
+    expect(check).not.toHaveBeenCalled();
+    const guarded = events.find((e) => e.type === "guarded");
+    expect(guarded).toMatchObject({
+      suggestion: { medicines: ["advil", "coumadin"], changes: [{ from: "coumdin", to: "coumadin" }] },
+    });
+    expect(speak.mock.calls[0]![0]).toMatch(/Did you mean Coumadin\?/);
+  });
+
+  it("no correction is offered when personal details were found", async () => {
+    const { d } = deps({ extract: misheard(), search: "?simulate=inject-pii" });
+    const { events } = await run(d);
+    const guarded = events.find((e) => e.type === "guarded");
+    expect(guarded && "suggestion" in guarded ? guarded.suggestion : undefined).toBeUndefined();
+  });
+
+  it("confirming skips listening and Nano, but still goes through the leak guard, Step 3 and the audit", async () => {
+    const listen = vi.fn(listenWith(TRANSCRIPT));
+    const { d, check, extract, audit } = deps({ listen });
+    const all: PipelineEvent[] = [];
+    const outcome = await runCheck(d, (e) => all.push(e), { text: "can I take advil with coumdin", medicines: ["advil", "coumadin"] }).done;
+    expect(outcome).toBe("answered");
+    expect(listen).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    expect(check).toHaveBeenCalledWith({ medicines: ["advil", "coumadin"], cabinet: [] });
+    expect(all.filter((e) => e.type !== "logged").map((e) => e.type)).toEqual(["guarded", "answered"]);
+    const entry = buildAuditEntry(audit.mock.calls[0]![0], new Date(0));
+    expect(entry.inferenceSource.extract).toBeNull(); // Nano did not run this time; the audit says so
+  });
+
+  it("a confirmed list that still fails the guard is blocked, with no second suggestion", async () => {
+    const { d, check } = deps();
+    const all: PipelineEvent[] = [];
+    const outcome = await runCheck(d, (e) => all.push(e), { text: "x", medicines: ["coumdin"] }).done;
+    expect(outcome).toBe("blocked");
+    expect(check).not.toHaveBeenCalled();
+    expect(all.find((e) => e.type === "guarded")).toMatchObject({ suggestion: undefined });
+  });
+});

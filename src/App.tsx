@@ -9,7 +9,8 @@ import { provenanceFor, type LogState } from "./ui/provenance";
 import { ProvenanceStrip } from "./ui/ProvenanceStrip";
 import { getConfig } from "./firebase/remoteConfig";
 import { REFUSAL_SPOKEN } from "./pipeline/messages";
-import { defaultDeps, runCheck, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
+import { defaultDeps, runCheck, type ConfirmedStart, type PipelineEvent, type RunHandle } from "./pipeline/orchestrator";
+import type { Correction } from "./data/suggest";
 import { speakLocally } from "./pipeline/step4-speak";
 import { activeSimulateFlags, writeAudit } from "./pipeline/step5-audit";
 import { ListeningPanel, type CheckState } from "./ui/ListeningPanel";
@@ -106,13 +107,34 @@ export function App() {
     setAddState({ phase: "idle" });
     setLogState("none");
 
+    startRun();
+  }
+
+  /** "Yes, check Coumadin": re-run from the corrected names (leak guard, Step 3, audit as usual). */
+  function onConfirmSuggestion(c: Correction) {
+    if (check.phase !== "understood") return;
+    if ("speechSynthesis" in globalThis) speechSynthesis.cancel();
+    const cfg = getConfig();
+    if (cfg.checksPaused) {
+      void speakLocally(cfg.pausedMessage); // kill switch applies to retries too
+      return;
+    }
+    setLogState("none");
+    startRun({ text: check.text, medicines: c.medicines });
+  }
+
+  function startRun(confirmed?: ConfirmedStart) {
     // Only the newest run may update the screen (an old cloud answer must not overwrite a new question).
     const id = ++runId.current;
     // Her medicine list goes in as `cabinet`; the leak guard maps it to ingredient names.
     const deps = { ...defaultDeps, cabinet: () => cabinet.namesForCheck() };
-    const handle = runCheck(deps, (e) => {
-      if (id === runId.current) onPipelineEvent(e);
-    });
+    const handle = runCheck(
+      deps,
+      (e) => {
+        if (id === runId.current) onPipelineEvent(e);
+      },
+      confirmed,
+    );
     run.current = handle;
     void handle.done.finally(() => {
       if (run.current === handle) run.current = null;
@@ -160,7 +182,14 @@ export function App() {
         return setCheck({ phase: "understanding", text: e.text });
       case "guarded":
         if (!e.guard.ok) setLogState("pending");
-        return setCheck({ phase: "understood", text: e.text, guard: e.guard, injected: e.injected, checking: e.checking });
+        return setCheck({
+          phase: "understood",
+          text: e.text,
+          guard: e.guard,
+          injected: e.injected,
+          checking: e.checking,
+          suggestion: e.suggestion,
+        });
       case "answered":
         setLogState("pending");
         return setCheck({ phase: "answered", text: e.text, answer: e.answer });
@@ -249,7 +278,7 @@ export function App() {
       {state === undefined && <div className="stage-placeholder" aria-hidden="true" />}
 
       {/* The answer first; where each step ran, right under it. */}
-      {state === "ready" && <ListeningPanel state={check} />}
+      {state === "ready" && <ListeningPanel state={check} onConfirmSuggestion={onConfirmSuggestion} />}
 
       {state === "ready" && provenance && <ProvenanceStrip steps={provenance} />}
 

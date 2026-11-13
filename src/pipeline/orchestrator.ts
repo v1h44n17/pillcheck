@@ -1,10 +1,11 @@
 import { cabinet } from "../cabinet/cabinet";
 import { biasPhrases } from "../data/biasPhrases";
+import { suggestCorrection, type Correction } from "../data/suggest";
 import { getConfig } from "../firebase/remoteConfig";
 import { OnDeviceUnavailableError, RoutingViolationError } from "../guards/onDeviceGuard";
 import { LeakBlockedError, scanOutbound, type LeakGuardResult, type OutboundRequest } from "../guards/leakGuard";
 import { withDemoInjection } from "./demoInjection";
-import { blockedSpokenMessage, CHECK_ERROR_MESSAGE, REFUSAL_SPOKEN, type CheckErrorKind } from "./messages";
+import { blockedSpokenMessage, CHECK_ERROR_MESSAGE, didYouMeanSpoken, REFUSAL_SPOKEN, type CheckErrorKind } from "./messages";
 import { ListenError, listenOnce, type ListenHandle, type ListenOptions } from "./step1-transcribe";
 import { ExtractionError, extractMedicines, type Extraction } from "./step2-extract";
 import { CheckAnswerError, checkInteractions, CheckUnavailableError, type InteractionAnswer } from "./step3-check";
@@ -60,7 +61,15 @@ export const defaultDeps: PipelineDeps = {
 export type PipelineEvent =
   | { type: "listening"; interim: string }
   | { type: "understanding"; text: string }
-  | { type: "guarded"; text: string; guard: LeakGuardResult; injected: boolean; checking: boolean }
+  | {
+      type: "guarded";
+      text: string;
+      guard: LeakGuardResult;
+      injected: boolean;
+      checking: boolean;
+      /** "Did you mean…?" (computed on the device). Only when blocked solely by near-miss medicine words. */
+      suggestion?: Correction;
+    }
   | { type: "answered"; text: string; answer: InteractionAnswer }
   | { type: "error"; kind: CheckErrorKind }
   | { type: "refused"; routingViolation: boolean }
@@ -85,7 +94,21 @@ function errorKindFor(e: unknown): { outcome?: Outcome; kind: CheckErrorKind } {
   return { kind: "failed" };
 }
 
-export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void): RunHandle {
+/**
+ * Start from medicines Meera confirmed on screen ("Yes, check Coumadin") instead
+ * of listening. Steps 1 and 2 are skipped (and audited as not run); the leak
+ * guard, Step 3 and the audit run exactly as usual.
+ */
+export interface ConfirmedStart {
+  text: string;
+  medicines: string[];
+}
+
+export function runCheck(
+  deps: PipelineDeps,
+  onEvent: (e: PipelineEvent) => void,
+  confirmed?: ConfirmedStart,
+): RunHandle {
   const demo = { injectedPii: false, simulate: activeSimulateFlags(deps.search) };
   let extractSource: string | undefined;
   let leakGuard: AuditInput["leakGuard"] = { result: "not-run" };
@@ -109,20 +132,29 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
     if (text) await deps.speak(text);
   };
 
-  onEvent({ type: "listening", interim: "" });
-  const listening = deps.listen({ onInterim: (interim) => onEvent({ type: "listening", interim }) });
+  let listening: ListenHandle | undefined;
+  if (!confirmed) {
+    onEvent({ type: "listening", interim: "" });
+    listening = deps.listen({ onInterim: (interim) => onEvent({ type: "listening", interim }) });
+  }
 
   const done = (async (): Promise<Outcome | undefined> => {
     let outcome: Outcome | undefined;
     try {
       // ── Step 1: on-device listening ──────────────────────────────────────
-      const heard = await listening.result;
+      const heard = listening ? await listening.result : { text: confirmed!.text };
 
       // ── Step 2: on-device understanding (Gemini Nano) ────────────────────
-      onEvent({ type: "understanding", text: heard.text });
-      const extracted = await deps.extract(heard.text);
-      extractSource = extracted.inferenceSource;
-      if (extracted.medicines.length === 0) {
+      let found: string[];
+      if (confirmed) {
+        found = confirmed.medicines; // she confirmed these on screen; Nano is not asked again
+      } else {
+        onEvent({ type: "understanding", text: heard.text });
+        const extracted = await deps.extract(heard.text);
+        extractSource = extracted.inferenceSource;
+        found = extracted.medicines;
+      }
+      if (found.length === 0) {
         outcome = "no-medicine";
         onEvent({ type: "error", kind: "no-medicine" });
         await settle(outcome, CHECK_ERROR_MESSAGE["no-medicine"]);
@@ -131,15 +163,17 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
 
       // ── Leak guard: decides what may leave the device ────────────────────
       // ?simulate=inject-pii adds a fictional name + birthday here (demo).
-      const { medicines, injected } = withDemoInjection(extracted.medicines, deps.search);
+      const { medicines, injected } = withDemoInjection(found, deps.search);
       demo.injectedPii = injected;
       const request: OutboundRequest = { medicines, cabinet: deps.cabinet?.() ?? [] };
       const guard = scanOutbound(request);
-      onEvent({ type: "guarded", text: heard.text, guard, injected, checking: guard.ok });
+      // Never offer a correction on a confirmed retry: one "Did you mean" per question.
+      const suggestion = guard.ok || confirmed ? undefined : suggestCorrection(medicines, guard.findings);
+      onEvent({ type: "guarded", text: heard.text, guard, injected, checking: guard.ok, suggestion });
       if (!guard.ok) {
         outcome = "blocked";
         leakGuard = { result: "blocked", kinds: guard.findings.map((f) => f.kind) };
-        await settle(outcome, blockedSpokenMessage(guard.findings));
+        await settle(outcome, suggestion ? didYouMeanSpoken(suggestion) : blockedSpokenMessage(guard.findings));
         return outcome;
       }
 
@@ -186,5 +220,5 @@ export function runCheck(deps: PipelineDeps, onEvent: (e: PipelineEvent) => void
     }
   })();
 
-  return { stop: () => listening.stop(), cancel: () => listening.cancel(), done };
+  return { stop: () => listening?.stop(), cancel: () => listening?.cancel(), done };
 }

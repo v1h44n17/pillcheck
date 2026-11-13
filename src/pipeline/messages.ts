@@ -40,3 +40,9 @@ export function blockedSpokenMessage(findings: Finding[]): string {
   }
   return "I stopped before checking, because something about the question didn't look right. Nothing left this device.";
 }
+
+/** "Did you mean…?" out loud. The answer is a button on screen; nothing is sent until she presses it. */
+export function didYouMeanSpoken(c: { changes: Array<{ from: string; to: string }> }): string {
+  const names = c.changes.map((ch) => ch.to.replace(/\b[a-z]/g, (x) => x.toUpperCase())).join(" and ");
+  return `I don't know that name. Did you mean ${names}? If so, press Yes on the screen.`;
+}

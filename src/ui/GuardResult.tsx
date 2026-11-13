@@ -1,4 +1,5 @@
 import type { MedicineMatch } from "../data/lexicon";
+import type { Correction } from "../data/suggest";
 import { PII_KINDS, type FindingKind, type LeakGuardResult } from "../guards/leakGuard";
 
 const KIND_LABEL: Record<FindingKind, string> = {
@@ -34,7 +35,18 @@ function MatchTag({ m }: { m: MedicineMatch }) {
 }
 
 /** Result of the leak guard, shown under "You asked". */
-export function GuardResult({ guard, injected }: { guard: LeakGuardResult; injected: boolean }) {
+export function GuardResult({
+  guard,
+  injected,
+  suggestion,
+  onConfirm,
+}: {
+  guard: LeakGuardResult;
+  injected: boolean;
+  /** "Did you mean…?" (on-device). Shown only when the block was solely near-miss medicine words. */
+  suggestion?: Correction;
+  onConfirm?: (c: Correction) => void;
+}) {
   if (guard.ok) {
     return (
       <>
@@ -74,6 +86,17 @@ export function GuardResult({ guard, injected }: { guard: LeakGuardResult; injec
           </li>
         ))}
       </ul>
+      {suggestion && onConfirm && (
+        <div className="did-you-mean">
+          <p>
+            Did you mean <strong>{suggestion.changes.map((c) => titleCase(c.to)).join(" and ")}</strong>?
+          </p>
+          <button type="button" className="big-button did-you-mean-yes" onClick={() => onConfirm(suggestion)}>
+            Yes, check {suggestion.changes.map((c) => titleCase(c.to)).join(" and ")}
+          </button>
+          <p className="hint">Nothing is sent until you press it. Or press "Check my medicine" to ask again.</p>
+        </div>
+      )}
     </div>
   );
 }

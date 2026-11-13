@@ -404,6 +404,9 @@ h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
 .guard-findings { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.4rem; font-size: 1rem; }
 .guard-findings li strong { display: block; }
 .guard-findings li span { color: var(--ink-soft); overflow-wrap: anywhere; }
+.did-you-mean { display: grid; gap: 0.6rem; border-top: 2px solid var(--line); padding-top: 0.8rem; }
+.did-you-mean p:first-child { font-size: 1.3rem; }
+.did-you-mean-yes { min-height: 4rem; font-size: 1.3rem; }
 
 /* --- Step 2: understood medicines --- */
 .listen-dot-think { background: var(--brand); }

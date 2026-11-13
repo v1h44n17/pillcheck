@@ -1,8 +1,8 @@
 import { getAuth } from "firebase/auth";
-import { addDoc, collection, serverTimestamp, type FieldValue } from "firebase/firestore";
+import type { FieldValue } from "firebase/firestore";
 import { getApp } from "firebase/app";
 import { isCanonicalIngredient } from "../data/lexicon";
-import { getPillcheckDb } from "../firebase/firestore";
+import { loadFirestore } from "../firebase/firestore";
 import type { FindingKind } from "../guards/leakGuard";
 import { ROUTING_POLICY } from "./policy";
 
@@ -69,7 +69,7 @@ export interface AuditEntry {
   appVersion: string;
 }
 
-export function buildAuditEntry(input: AuditInput, at: FieldValue | Date = serverTimestamp()): AuditEntry {
+export function buildAuditEntry(input: AuditInput, at: FieldValue | Date): AuditEntry {
   const sent = input.leakGuard.result === "passed" && input.answer ? input.leakGuard.sent : { medicines: [], cabinet: [] };
   return {
     schemaVersion: AUDIT_SCHEMA_VERSION,
@@ -124,11 +124,12 @@ export function assertAuditSafe(e: AuditEntry): void {
 /** Builds, checks and writes the entry. Never throws to the caller: auditing must not block an answer. */
 export async function writeAudit(input: AuditInput): Promise<string | undefined> {
   try {
-    const entry = buildAuditEntry(input);
+    const { db, fs } = await loadFirestore();
+    const entry = buildAuditEntry(input, fs.serverTimestamp());
     assertAuditSafe(entry);
     const uid = getAuth(getApp()).currentUser?.uid;
     if (!uid) throw new Error("not signed in");
-    const ref = await addDoc(collection(getPillcheckDb(), "users", uid, "audit"), entry);
+    const ref = await fs.addDoc(fs.collection(db, "users", uid, "audit"), entry);
     return ref.id;
   } catch (e) {
     // Log only the error type: never the entry contents.

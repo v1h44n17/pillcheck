@@ -1,3 +1,4 @@
+import type { Correction } from "../data/suggest";
 import type { LeakGuardResult } from "../guards/leakGuard";
 import { CHECK_ERROR_MESSAGE, type CheckErrorKind } from "../pipeline/messages";
 import type { InteractionAnswer } from "../pipeline/step3-check";
@@ -9,12 +10,25 @@ export type CheckState =
   | { phase: "listening"; interim: string }
   | { phase: "understanding"; text: string }
   /** Guard result shown; if it passed, Step 3 is running ("checking"). */
-  | { phase: "understood"; text: string; guard: LeakGuardResult; injected: boolean; checking: boolean }
+  | {
+      phase: "understood";
+      text: string;
+      guard: LeakGuardResult;
+      injected: boolean;
+      checking: boolean;
+      suggestion?: Correction;
+    }
   | { phase: "answered"; text: string; answer: InteractionAnswer }
   | { phase: "error"; kind: CheckErrorKind };
 
 /** What Meera sees while PillCheck listens, thinks, and answers. */
-export function ListeningPanel({ state }: { state: CheckState }) {
+export function ListeningPanel({
+  state,
+  onConfirmSuggestion,
+}: {
+  state: CheckState;
+  onConfirmSuggestion?: (c: Correction) => void;
+}) {
   if (state.phase === "idle") return null;
 
   if (state.phase === "listening") {
@@ -41,7 +55,12 @@ export function ListeningPanel({ state }: { state: CheckState }) {
             Understanding on this device…
           </p>
         ) : (
-          <GuardResult guard={state.guard} injected={state.injected} />
+          <GuardResult
+            guard={state.guard}
+            injected={state.injected}
+            suggestion={state.suggestion}
+            onConfirm={onConfirmSuggestion}
+          />
         )}
 
         {state.phase === "understood" && state.checking && (

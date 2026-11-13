@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Readiness } from "../guards/onDeviceGuard";
 import { scanOutbound } from "../guards/leakGuard";
+import { suggestCorrection } from "../data/suggest";
 import type { InteractionAnswer, Verdict } from "../pipeline/step3-check";
 import { CabinetCard } from "../ui/CabinetCard";
 import { ListeningPanel, type CheckState } from "../ui/ListeningPanel";
@@ -51,6 +52,18 @@ const CHECKS: Array<[string, CheckState, LogState]> = [
       guard: scanOutbound({ medicines: ["advil", "Meera Sharma", "12/03/1951"] }),
       injected: true,
       checking: false,
+    },
+    "ok",
+  ],
+  [
+    "Did you mean…? (misheard medicine, nothing sent)",
+    {
+      phase: "understood",
+      text: "Can I take Advil with coumdin?",
+      guard: scanOutbound({ medicines: ["advil", "coumdin"] }),
+      injected: false,
+      checking: false,
+      suggestion: suggestCorrection(["advil", "coumdin"], [{ kind: "unknown-term", value: "coumdin", field: "medicines" }]),
     },
     "ok",
   ],
@@ -130,7 +143,7 @@ export function Gallery() {
         const steps = provenanceFor(state, log);
         return (
           <Frame key={title} title={title}>
-            <ListeningPanel state={state} />
+            <ListeningPanel state={state} onConfirmSuggestion={() => {}} />
             {steps && <ProvenanceStrip steps={steps} />}
           </Frame>
         );
