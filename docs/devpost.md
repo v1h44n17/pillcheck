@@ -1,13 +1,29 @@
 # PillCheck: Devpost submission (draft)
 
-> Paste each section into the matching Devpost field. Before submitting (Day 17), replace the two `TODO` links. Every number below is either measured in this repo or cited in the README's [Why](../README.md#why) section.
+> Paste each section into the matching Devpost field. Every number below is either measured in this repo or cited in the README's [Why](../README.md#why) section.
+
+## Submission checklist (deadline 1 Dec 2026, 03:30 IST; aim for 30 Nov, 18:00 IST)
+
+Done and verified (15 Nov 2026):
+- [x] **Public repo with Apache 2.0:** https://github.com/v1h44n17/pillcheck (author emails use the GitHub no-reply address).
+- [x] **Secret scan:** gitleaks found no leaks in all 17 commits. Every past version of every file was also checked against the real config values, and none appear. The env files are not in the repo.
+- [x] **Live app:** https://pillcheck-by-v1h44n.web.app matches the latest code. It has security headers and a CSP, and App Check is enforced (no token gets 401 from Gemini and 403 from Firestore).
+- [x] **Tests:** 231 unit and 12 security-rules tests passing, and the code type-checks.
+- [x] **Text description:** this file.
+
+Left for you:
+- [ ] **Record the video** with [video-script.md](video-script.md), upload it to YouTube as **Public**, and add [subtitles](video-subtitles.en.srt).
+- [ ] Put the video link below and in the README, or send it to Claude to do.
+- [ ] On Devpost, paste each section below, add both links, and upload 3–5 screenshots (answer card, leak-guard block, refusal screen, privacy log, provenance strip).
+- [ ] **Submit**, then open the submission page logged out to check it shows.
+- [ ] *Note:* `npm audit` lists 4 "high" advisories in `@grpc/grpc-js`. That is Firestore's Node.js transport, and it is **not in the browser bundle** (checked). The suggested fix would downgrade Firebase to v9, so it was not applied.
 
 **Tagline (≤ 200 characters):**
 Press one button, ask out loud if two pills are safe together, and hear a calm answer. Your voice and name never leave your computer. Only drug names reach the cloud.
 
 **Links**
 - Live app: https://pillcheck-by-v1h44n.web.app (Chrome desktop with Gemini Nano)
-- Code: TODO (GitHub, public on Day 17)
+- Code: https://github.com/v1h44n17/pillcheck
 - Video: TODO (YouTube, Day 16)
 
 ---
