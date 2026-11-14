@@ -3,20 +3,22 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> Status: **Day 12 of 17**: **live at https://pillcheck-by-v1h44n.web.app** with **App Check enforced** (reCAPTCHA Enterprise / Fraud Defense) on Firebase AI Logic and Cloud Firestore, a strict Content Security Policy, and everything from Days 1–11: the full hybrid pipeline, on-device medicine list, provenance strip, safe Remote Config, age-friendly design, privacy receipt and demo controls (`?demo`). See [docs/PLAN.md](docs/PLAN.md).
+> **Live: https://pillcheck-by-v1h44n.web.app** (Chrome desktop with Gemini Nano; see [Setup](#setup)). App Check is enforced on Firebase AI Logic and Cloud Firestore. Safety evaluation **30/30**, **231 unit tests + 12 security-rules tests**, Lighthouse accessibility **100**.
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---
 
 ## Why
 
-Meera is 74, lives alone and takes five medicines. When she isn't sure two pills are safe together, she calls her daughter (who may not answer) or skips the dose. Skipped and mixed-up doses send seniors to the hospital every day.
+Meera is 74, lives alone and takes five medicines, one of them warfarin. Her knee hurts. Is it safe to take Advil? The leaflet print is tiny, her daughter isn't answering, and typing a long drug name into a search box is hard. So she either guesses or goes without.
 
-*Evidence (⚠️ figures pending source verification on Day 15; not yet for publication):*
-- Seniors account for a disproportionate share of medication errors.
-- Home medication errors drive a large number of ER visits each year.
-- Adverse drug events among seniors cause hundreds of thousands of hospitalizations a year.
-- Nonadherent elderly patients have roughly double the inpatient cost of adherent ones.
+That guess is where the harm is:
+
+- **About 1 in 6 older Americans (15.1%) were at risk of a potential major drug–drug interaction** in 2010–11, up from 8.4% in 2005–06. **35.8% took five or more prescription medicines at once.** ([Qato et al., *JAMA Internal Medicine* 2016](https://doi.org/10.1001/jamainternmed.2015.8581))
+- **Adults 65 and over visit US emergency departments for adverse drug events more than 600,000 times a year**, more than twice as often as younger people. Anticoagulants (21%) and diabetes medicines such as insulin (14%) are the leading causes. ([CDC, Medication Safety Data](https://www.cdc.gov/medication-safety/data-research/facts-stats/index.html))
+- **About 100,000 emergency hospitalizations a year of adults 65+ are caused by adverse drug events** (2007–09). Nearly half were people over 80, and **warfarin alone was involved in one in three.** ([Budnitz et al., *NEJM* 2011](https://doi.org/10.1056/NEJMsa1103053))
+
+PillCheck is for the moment before the pill: one button, one spoken question, and a calm answer that sends her to the pharmacist when it matters. Her voice, her name and her questions stay on her own computer.
 
 ## How hybrid inference is used: the routing policy
 
@@ -61,6 +63,8 @@ If on-device AI isn't available, PillCheck says **"I can't check safely on this 
 2. the recogniser exposes `processLocally`, and reading it back after setting it to `true` returns `true`;
 3. no `network` error occurs. On-device recognition needs no network, so a network error means the browser tried a server, and PillCheck refuses instead of retrying.
 
+**It hears drug names correctly, on the device.** Before biasing, the on-device recogniser heard "Can I take Advil?" as *"Can I take Behind Patel?"*. PillCheck now passes Chrome's contextual-biasing phrases (`SpeechRecognitionPhrase`) to the local recogniser: her own medicines get the strongest boost, then 65 brand and generic names older adults commonly take ([`biasPhrases.ts`](src/data/biasPhrases.ts)). Every phrase must be in the lexicon. If a browser rejects phrases, PillCheck retries once without them, still on the device.
+
 The transcript lives only in memory: it isn't logged, stored or sent.
 
 ### Step 2: the privacy airlock (Gemini Nano, `ONLY_ON_DEVICE`)
@@ -70,7 +74,7 @@ The transcript lives only in memory: it isn't logged, stored or sent.
 - `getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE, onDeviceParams: { createOptions, promptOptions: { responseConstraint } } })`
 - **Guard before, check after:** `assertNanoReady()` runs before the transcript is handed to the SDK, and `assertRanOnDevice(response.inferenceSource)` runs on the result.
 - **Instructions go in `createOptions.initialPrompts` (role `system`), not `systemInstruction`.** Verified in the SDK source: the on-device path only forwards `createOptions` and the request contents to Chrome's Prompt API. A `systemInstruction` would silently never reach Nano.
-- **Structured output on-device:** a JSON Schema is passed as `responseConstraint`, so Nano must answer `{"medicines": [...]}` (max 5 names, 40 characters each). A first-pass clean-up drops anything with digits, `@`, `/` and the like. The full leak guard comes on Day 5.
+- **Structured output on-device:** a JSON Schema is passed as `responseConstraint`, so Nano must answer `{"medicines": [...]}` (max 5 names, 40 characters each). A first-pass clean-up drops anything with digits, `@`, `/` and the like, before the full leak guard below.
 
 **Try it without speaking (dev builds only):** in the DevTools console at localhost, run
 
@@ -118,7 +122,7 @@ await __pillcheck.extract("This is Meera, born March 3rd. Can I take two Advil w
 
 **Why the cloud for this step, and no on-device fallback:** a safety call about drug interactions needs the larger model plus label grounding. If the cloud is unreachable, PillCheck says *"I couldn't check right now… ask your pharmacist"*. It never lets Nano say "that's safe".
 
-**Cloud models, tried in order:** `gemini-3.5-flash-lite`, then `gemini-3.8-flash` (both cloud, same payload). Measured on 14 Nov 2026: flash-lite answered correctly in about 6–12 s, while 3.8-flash was returning *500 "high demand"*. Remote Config takes over this list on Day 9.
+**Cloud models, tried in order:** `gemini-3.5-flash-lite`, then `gemini-3.8-flash` (both cloud, same payload; the list comes from [Remote Config](#remote-config-tune-it-never-weaken-it)). **Each model gets 15 seconds**, and each FDA label request gets 6 seconds. After that, PillCheck moves to the next model and finally says *"I couldn't check right now… ask your pharmacist"*. It never leaves Meera waiting.
 
 **Live results** (real Gemini, real FDA labels):
 
@@ -217,8 +221,8 @@ Each step shows *waiting → in progress → done*, or *blocked / skipped / didn
 | **App Check, enforced** on Firebase AI Logic and Cloud Firestore | Only the genuine PillCheck web app (reCAPTCHA Enterprise score-based attestation) can call Gemini or touch the database. AI Logic calls use **limited-use tokens** (replay protection) | Gemini request with **no** token → `401 UNAUTHENTICATED: Firebase App Check token is invalid`; with a **forged** token → the same `401`. The live app, with its real token, still reads and writes Firestore |
 | **Content Security Policy** (`firebase.json`) | `connect-src` lists every server the page may contact: Firebase + openFDA. **The browser refuses everything else**, even from a compromised dependency | From the live page: `api.fda.gov` → 200; `example.com` and another Google API → *"Refused to connect… violates the document's Content Security Policy"*. [`tests/security.test.ts`](tests/security.test.ts) pins the list |
 | **Permissions-Policy** | Microphone for this site only; camera, location, payment, USB off | Live headers checked |
-| **No debug token in production** | App Check debug settings live in `.env.development.local`, which production builds never read | A whole-object `import.meta.env` default had been inlining every `VITE_*` value, the debug token included, into the bundle. **Caught on Day 12 before any deploy**, fixed, and guarded by a test that fails on the old code |
-| Firestore rules | Own UID only, append-only, schema-checked (Day 7) | 12 emulator tests |
+| **No debug token in production** | App Check debug settings live in `.env.development.local`, which production builds never read | A whole-object `import.meta.env` default had been inlining every `VITE_*` value, the debug token included, into the bundle. **Caught before the first deploy**, fixed, and guarded by a test that fails on the old code |
+| Firestore rules | Own UID only, append-only, schema-checked | 12 emulator tests |
 | `Referrer-Policy: no-referrer`, `nosniff`, HSTS, `frame-ancestors 'none'` | Standard hardening | Live headers checked |
 
 **Deploy:** `npm run deploy:hosting` (build + `firebase deploy --only hosting`).
@@ -227,28 +231,37 @@ Each step shows *waiting → in progress → done*, or *blocked / skipped / didn
 
 [`orchestrator.ts`](src/pipeline/orchestrator.ts) runs Steps 1–5 for each press of the button, with every step injected so [`tests/orchestrator.test.ts`](tests/orchestrator.test.ts) can drive the whole flow with fakes. That includes the inject-PII demo (blocked, no cloud call, audit holds finding types only) and each refusal path.
 
-**Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, and two badges: 🔒 *Heard on this device* and 🔒 *Understood on this device*. With DevTools → Network open (filter "All"), **no request** is made while you speak. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
+**Try it:** press **Check my medicine** and say "Can I take ibuprofen?". The words appear as you speak, then "You asked: …", the medicine names, the privacy check, and the spoken answer, while the provenance strip fills in step by step. With DevTools → Network open, **no request** is made while you speak or while Nano works. The first request is the cleaned drug names going to Step 3. Press the button again ("I'm done talking") to stop early. Stay silent and it says "I didn't hear anything…".
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Device["🔒 Senior's device (Chrome)"]
-    Mic[Big button + mic] --> STT[Step 1<br/>On-device speech]
-    STT -->|transcript| Nano[Step 2<br/>Gemini Nano<br/>ONLY_ON_DEVICE]
-    Nano -->|drug names| Guard{Leak guard}
-    Guard -->|blocked| Stop[Visible error<br/>no cloud call]
-    TTS[Step 4<br/>On-device voice]
+  subgraph Device["🔒 Meera's computer (Chrome): no network"]
+    direction TB
+    S1["<b>1 · Hear</b><br/>on-device speech<br/>processLocally"] -->|"transcript<br/>(may include her name)"| S2["<b>2 · Understand</b><br/>Gemini Nano<br/>ONLY_ON_DEVICE"]
+    S2 -->|"['advil']"| G{"<b>Leak guard</b><br/>known drugs only,<br/>PII scan"}
+    G -->|"anything else"| Block["🛑 Stopped<br/>nothing sent"]
+    S4["<b>4 · Speak</b><br/>local voice"]
   end
-  subgraph Cloud["☁️ Firebase"]
-    Gemini[Step 3<br/>Cloud Gemini<br/>ONLY_IN_CLOUD]
-    FS[(Step 5<br/>Firestore audit log)]
-    AC[App Check]
+  subgraph Cloud["☁️ Firebase: drug names only"]
+    direction TB
+    AC["App Check<br/>(enforced)"] --> S3["<b>3 · Check</b><br/>cloud Gemini<br/>ONLY_IN_CLOUD"]
+    FDA["openFDA labels"] --> S3
+    FS[("<b>5 · Audit</b><br/>Firestore, no PII")]
   end
-  Guard -->|"['warfarin','ibuprofen']"| AC --> Gemini
-  Gemini -->|1–3 sentences| TTS
-  Gemini -.-> FS
+  G -->|"ibuprofen + warfarin"| AC
+  S3 -->|"verdict + 1–3 sentences"| S4
+  S4 -.->|"where each step ran,<br/>what was sent"| FS
 ```
+
+Everything in the left box runs on the device, with no network. Only two things cross into the cloud: canonical drug names (Step 3) and a privacy-safe audit record (Step 5) of **where each step actually ran**, as reported by the SDK.
+
+Not drawn, to keep it readable:
+- **My medicines** stay in `localStorage` and join the check as canonical names after the leak guard.
+- **"Did you mean…?"** loops back into the leak guard once Meera confirms.
+- **Remote Config** sets the cloud models, limits and kill switch.
+- If Nano or local speech is missing, the app **refuses** before Step 1 or 2. Blocks and refusals are audited too.
 
 ## Before / after
 
@@ -262,7 +275,7 @@ flowchart LR
 
 ## Setup
 
-**Prerequisites:** Node 22+, Chrome desktop 139+ on a machine with a GPU (>4 GB VRAM) or 16 GB RAM, ≥22 GB free disk, a Firebase project.
+**Prerequisites:** Node 22+, Chrome desktop (developed and tested on Chrome 156) on a machine with a GPU (>4 GB VRAM) or 16 GB RAM, ≥22 GB free disk, a Firebase project.
 
 1. **Chrome:** open `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` → *Enabled* → restart. In DevTools, `await LanguageModel.availability()` should return `available`, `downloadable` or `downloading`.
 2. **Firebase console:**
@@ -286,11 +299,11 @@ flowchart LR
 
    *Tip:* put `VITE_APPCHECK_DEBUG=true` and `VITE_APPCHECK_DEBUG_TOKEN=<uuidgen output>` in **`.env.development.local`** (never `.env.local`: production builds read that file) and register the UUID once; then every local browser shares it.
 5. **One-time on-device setup:** if speech recognition or Gemini Nano isn't downloaded yet, PillCheck shows **Set up PillCheck**. Click it once; it installs the US-English speech pack and downloads Gemini Nano, with progress.
-6. **Tests:** `npm test` (unit tests for the guard plus the SDK fall-through evidence test).
+6. **Tests:** `npm test` runs 231 unit tests, including the SDK fall-through evidence test. `npm run test:rules` runs the 12 security-rules tests on the Firestore emulator (Java 21+).
 
 You should see the **System check** panel with Firebase ✓, App Check ✓, Anonymous sign-in ✓ and the on-device capability rows.
 
-## Demo script (run-through; video timing finalised on Day 15)
+## Demo script
 
 Open **`/?demo`**. A dashed **Demo controls** panel appears (only with `?demo`), with switches that edit the same `?simulate=` flags the guards read. Every switch can only make PillCheck *refuse*; none can make it send more.
 
@@ -320,8 +333,8 @@ src/receipt/      receipt.ts: reads the user's own audit log back in plain langu
 src/demo/         demoFlags.ts: ?simulate switches for the Demo controls panel (?demo)
 src/ui/           ProvenanceStrip (+ provenance.ts) · HelpersDrawer · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
 src/dev/          Gallery.tsx: every screen with sample data (?gallery, dev builds only)
-tests/            onDeviceGuard · step1–3 · step5-audit · orchestrator · leakGuard · lexicon · sdkFallthrough (evidence + control) · rules/ (emulator)
-docs/             plan, architecture, evidence, demo script
+tests/            19 files: guards · step1–5 · orchestrator · lexicon · suggest · biasPhrases · security (CSP, no debug token) · contrast · sdkFallthrough (evidence + control) · rules/ (emulator)
+docs/             PLAN.md · eval-results.md (safety evaluation) · devpost.md (submission text)
 ```
 
 ## License
