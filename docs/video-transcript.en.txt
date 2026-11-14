@@ -1,0 +1,31 @@
+Meera is seventy-four and takes five medicines, including warfarin, a blood thinner. Her knee hurts. Can she take Advil?
+
+One in six older Americans is at risk of a major drug interaction.
+
+An AI could answer in seconds, but it would hear her voice, her name and her health. PillCheck is built so the cloud only ever sees drug names.
+
+Meera: Can I take Advil?
+
+PillCheck: Please don't take Advil with your Coumadin. Using them together greatly raises your risk of serious bleeding. Check with your doctor or pharmacist first.
+
+It said Coumadin: the name on her own list, which lives only in this browser.
+
+Each step is pinned to one place. Speech recognition runs on this computer. Gemini Nano, through Firebase AI Logic in ONLY ON DEVICE mode, pulls out the drug names.
+
+A leak guard lets only known ingredient names through. Then cloud Gemini, in ONLY IN CLOUD mode, checks the interaction against F.D.A. labels, and a local voice speaks the answer.
+
+The strip shows where every step ran. Everything that left the device: three drug names.
+
+Now I'll simulate a model leaking a name and birthday.
+
+PillCheck: I stopped before checking, because something personal was about to be sent. Nothing left this device.
+
+I found that without Chrome's on-device model, the SDK quietly sends ON DEVICE requests to the cloud. So PillCheck checks every on-device step, and refuses instead.
+
+PillCheck: I can't check safely on this device. I won't send your question anywhere. If you're unsure about a medicine, please call your pharmacist.
+
+Every check is logged in Firestore with no personal data, and App Check is enforced. Her family can read it back: only medicine names ever left this computer.
+
+On thirty test pairs: no missed dangers, no false alarms.
+
+PillCheck. One button, a calm answer, and her voice stays home.

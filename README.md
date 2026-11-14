@@ -305,6 +305,8 @@ You should see the **System check** panel with Firebase ✓, App Check ✓, Anon
 
 ## Demo script
 
+The 3-minute video follows [docs/video-script.md](docs/video-script.md), with English subtitles in [`video-subtitles.en.srt`](docs/video-subtitles.en.srt).
+
 Open **`/?demo`**. A dashed **Demo controls** panel appears (only with `?demo`), with switches that edit the same `?simulate=` flags the guards read. Every switch can only make PillCheck *refuse*; none can make it send more.
 
 **Setup (once):** in **My medicines**, press **＋ Add a medicine** → *"I take Coumadin and Lipitor."* Both appear; no network request is made.
@@ -334,7 +336,7 @@ src/demo/         demoFlags.ts: ?simulate switches for the Demo controls panel (
 src/ui/           ProvenanceStrip (+ provenance.ts) · HelpersDrawer · RefusalScreen · SetupCard · ListeningPanel · GuardResult · AnswerCard · CabinetCard · SystemCheck
 src/dev/          Gallery.tsx: every screen with sample data (?gallery, dev builds only)
 tests/            19 files: guards · step1–5 · orchestrator · lexicon · suggest · biasPhrases · security (CSP, no debug token) · contrast · sdkFallthrough (evidence + control) · rules/ (emulator)
-docs/             PLAN.md · eval-results.md (safety evaluation) · devpost.md (submission text)
+docs/             PLAN.md · eval-results.md (safety evaluation) · devpost.md (submission text) · video-script.md + subtitles
 ```
 
 ## License
