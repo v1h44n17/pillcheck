@@ -1,144 +1,143 @@
 1
-00:00:01,000 --> 00:00:06,597
+00:00:01,200 --> 00:00:06,839
 Meera is seventy-four and takes five medicines,
 including warfarin, a blood thinner.
 
 2
-00:00:06,647 --> 00:00:08,950
+00:00:06,889 --> 00:00:09,210
 Her knee hurts. Can she take Advil?
 
 3
-00:00:09,300 --> 00:00:14,850
+00:00:09,610 --> 00:00:13,670
 One in six older Americans is at
 risk of a major drug interaction.
 
 4
-00:00:15,200 --> 00:00:22,012
+00:00:14,070 --> 00:00:19,261
 An AI could answer in seconds, but it would
 hear her voice, her name and her health.
 
 5
-00:00:22,062 --> 00:00:26,750
+00:00:19,311 --> 00:00:22,880
 PillCheck is built so the cloud
 only ever sees drug names.
 
 6
-00:00:28,100 --> 00:00:30,050
+00:00:23,280 --> 00:00:24,940
 Meera: Can I take Advil?
 
 7
-00:00:33,900 --> 00:00:36,555
-PillCheck: Please don't take
-Advil with your Coumadin.
+00:00:25,590 --> 00:00:29,898
+PillCheck: Please don't take Advil with your
+Coumadin because combining them can cause serious
 
 8
-00:00:36,605 --> 00:00:40,645
-Using them together greatly raises
-your risk of serious bleeding.
+00:00:29,948 --> 00:00:30,371
+bleeding.
 
 9
-00:00:40,695 --> 00:00:43,350
-Check with your doctor
-or pharmacist first.
+00:00:30,421 --> 00:00:34,466
+Please check with your doctor or pharmacist
+first before adding this medicine.
 
 10
-00:00:43,700 --> 00:00:50,050
+00:00:35,316 --> 00:00:40,276
 It said Coumadin: the name on her own list,
 which lives only in this browser.
 
 11
-00:00:50,400 --> 00:00:55,906
+00:00:40,676 --> 00:00:45,594
 Each step is pinned to one place.
 Speech recognition runs on this computer.
 
 12
-00:00:55,956 --> 00:01:00,498
+00:00:45,644 --> 00:00:49,700
 Gemini Nano, through Firebase AI
 Logic in ONLY ON DEVICE mode,
 
 13
-00:01:00,548 --> 00:01:02,350
+00:00:49,750 --> 00:00:51,356
 pulls out the drug names.
 
 14
-00:01:02,700 --> 00:01:06,433
+00:00:51,756 --> 00:00:55,138
 A leak guard lets only known
 ingredient names through.
 
 15
-00:01:06,483 --> 00:01:11,968
+00:00:55,188 --> 00:01:00,160
 Then cloud Gemini, in ONLY IN CLOUD mode,
 checks the interaction against F.D.A.
 
 16
-00:01:12,018 --> 00:01:15,050
+00:01:00,210 --> 00:01:02,956
 labels, and a local
 voice speaks the answer.
 
 17
-00:01:15,400 --> 00:01:18,072
+00:01:03,356 --> 00:01:05,845
 The strip shows where every step ran.
 
 18
-00:01:18,122 --> 00:01:21,750
+00:01:05,895 --> 00:01:09,276
 Everything that left the
 device: three drug names.
 
 19
-00:01:22,100 --> 00:01:26,450
+00:01:09,676 --> 00:01:12,566
 Now I'll simulate a model
 leaking a name and birthday.
 
 20
-00:01:30,300 --> 00:01:34,750
+00:01:12,966 --> 00:01:17,304
 PillCheck: I stopped before checking,
 because something personal was about to be sent.
 
 21
-00:01:34,800 --> 00:01:36,250
+00:01:17,354 --> 00:01:18,766
 Nothing left this device.
 
 22
-00:01:36,600 --> 00:01:39,617
+00:01:19,616 --> 00:01:22,593
 I found that without
 Chrome's on-device model,
 
 23
-00:01:39,667 --> 00:01:43,217
+00:01:22,643 --> 00:01:26,146
 the SDK quietly sends ON
 DEVICE requests to the cloud.
 
 24
-00:01:43,267 --> 00:01:47,350
+00:01:26,196 --> 00:01:30,226
 So PillCheck checks every on-device
 step, and refuses instead.
 
 25
-00:01:51,200 --> 00:01:55,444
+00:01:30,626 --> 00:01:34,822
 PillCheck: I can't check safely on this device.
 I won't send your question anywhere.
 
 26
-00:01:55,494 --> 00:01:59,150
+00:01:34,872 --> 00:01:38,486
 If you're unsure about a medicine,
 please call your pharmacist.
 
 27
-00:01:59,500 --> 00:02:05,656
+00:01:39,336 --> 00:01:44,476
 Every check is logged in Firestore with no
 personal data, and App Check is enforced.
 
 28
-00:02:05,706 --> 00:02:11,050
+00:01:44,526 --> 00:01:48,986
 Her family can read it back:
 only medicine names ever left this computer.
 
 29
-00:02:11,400 --> 00:02:15,750
+00:01:49,386 --> 00:01:53,886
 On thirty test pairs:
 no missed dangers, no false alarms.
 
 30
-00:02:16,100 --> 00:02:20,850
+00:01:54,286 --> 00:01:58,786
 PillCheck. One button, a calm answer,
 and her voice stays home.

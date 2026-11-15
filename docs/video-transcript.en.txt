@@ -6,7 +6,7 @@ An AI could answer in seconds, but it would hear her voice, her name and her hea
 
 Meera: Can I take Advil?
 
-PillCheck: Please don't take Advil with your Coumadin. Using them together greatly raises your risk of serious bleeding. Check with your doctor or pharmacist first.
+PillCheck: Please don't take Advil with your Coumadin because combining them can cause serious bleeding. Please check with your doctor or pharmacist first before adding this medicine.
 
 It said Coumadin: the name on her own list, which lives only in this browser.
 

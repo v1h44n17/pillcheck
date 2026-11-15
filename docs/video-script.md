@@ -50,7 +50,7 @@ The four judging criteria and where the video answers each:
 | At | Who | Line | ~s |
 |---|---|---|---|
 | 00:28 | Meera / you, into the mic | Can I take Advil? | 2 |
-| 00:33 | **PillCheck** (app audio) | Please don't take Advil with your Coumadin. Using them together greatly raises your risk of serious bleeding. Check with your doctor or pharmacist first. | 9.5 |
+| 00:33 | **PillCheck** (app audio) | Please don't take Advil with your Coumadin because combining them can cause serious bleeding. Please check with your doctor or pharmacist first before adding this medicine. | 9.5 |
 | 00:43 | You (voice-over) | It said Coumadin: the name on her own list, which lives only in this browser. | 6.4 |
 
 ### 3. How the hybrid split works (starts ~00:50)

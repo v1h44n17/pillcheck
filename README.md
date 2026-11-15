@@ -3,7 +3,7 @@
 **Press one big button, say the name of a pill, hear a calm answer.**
 PillCheck is a voice-first medication safety checker for seniors, built on **Firebase AI Logic hybrid inference**. Anything that could identify you stays on your device. Only a cleaned list of drug names ever reaches the cloud.
 
-> **Live: https://pillcheck-by-v1h44n.web.app** (Chrome desktop with Gemini Nano; see [Setup](#setup)). App Check is enforced on Firebase AI Logic and Cloud Firestore. Safety evaluation **30/30**, **231 unit tests + 12 security-rules tests**, Lighthouse accessibility **100**.
+> **Live: https://pillcheck-by-v1h44n.web.app** · **Demo video (2 min): https://youtu.be/q3ZRySaiAMg** (Chrome desktop with Gemini Nano; see [Setup](#setup)). App Check is enforced on Firebase AI Logic and Cloud Firestore. Safety evaluation **30/30**, **231 unit tests + 12 security-rules tests**, Lighthouse accessibility **100**.
 > Built for #BuildHybridAI 2026. Licensed under [Apache 2.0](LICENSE).
 
 ---

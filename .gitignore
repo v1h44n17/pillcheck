@@ -20,3 +20,6 @@ ui-debug.log
 .DS_Store
 .vscode/
 .idea/
+
+# demo video build (large media, generated)
+video-build/

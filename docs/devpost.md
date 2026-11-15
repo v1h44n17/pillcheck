@@ -1,4 +1,6 @@
-# PillCheck: Devpost submission (draft)
+# PillCheck: Devpost submission
+
+**Submitted 16 Nov 2026:** https://devpost.com/software/pillcheck-wexj9t
 
 > Paste each section into the matching Devpost field. Every number below is either measured in this repo or cited in the README's [Why](../README.md#why) section.
 
@@ -11,11 +13,11 @@ Done and verified (15 Nov 2026):
 - [x] **Tests:** 231 unit and 12 security-rules tests passing, and the code type-checks.
 - [x] **Text description:** this file.
 
-Left for you:
-- [ ] **Record the video** with [video-script.md](video-script.md), upload it to YouTube as **Public**, and add [subtitles](video-subtitles.en.srt).
-- [ ] Put the video link below and in the README, or send it to Claude to do.
-- [ ] On Devpost, paste each section below, add both links, and upload 3–5 screenshots (answer card, leak-guard block, refusal screen, privacy log, provenance strip).
-- [ ] **Submit**, then open the submission page logged out to check it shows.
+Also done:
+- [x] **Video:** recorded from real runs of the live site, uploaded to YouTube with English subtitles: https://youtu.be/q3ZRySaiAMg
+- [x] Video link added below and in the README.
+- [x] Devpost filled in: every section below, both links, the video and 6 screenshots from the recorded run.
+- [x] **Submitted** and checked logged out: https://devpost.com/software/pillcheck-wexj9t
 - [ ] *Note:* `npm audit` lists 4 "high" advisories in `@grpc/grpc-js`. That is Firestore's Node.js transport, and it is **not in the browser bundle** (checked). The suggested fix would downgrade Firebase to v9, so it was not applied.
 
 **Tagline (≤ 200 characters):**
@@ -24,7 +26,7 @@ Press one button, ask out loud if two pills are safe together, and hear a calm a
 **Links**
 - Live app: https://pillcheck-by-v1h44n.web.app (Chrome desktop with Gemini Nano)
 - Code: https://github.com/v1h44n17/pillcheck
-- Video: TODO (YouTube, Day 16)
+- Video: https://youtu.be/q3ZRySaiAMg (2:02, English subtitles)
 
 ---
 
@@ -42,7 +44,7 @@ So the question I built around was: **what if the cloud only ever saw the drug n
 
 ## What it does
 
-Meera presses one big button and says *"Can I take Advil?"* A few seconds later she hears *"Please don't take Advil with your Coumadin. Using them together greatly raises your risk of serious bleeding. Check with your doctor or pharmacist first."*
+Meera presses one big button and says *"Can I take Advil?"* A few seconds later she hears *"Please don't take Advil with your Coumadin because combining them can cause serious bleeding. Please check with your doctor or pharmacist first before adding this medicine."* (the exact answer from the recorded demo run)
 
 Under the hood, each step is pinned to one place on purpose:
 
